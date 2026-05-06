@@ -5,7 +5,7 @@ argument-hint: <screen-name> [tab|modal|nested]
 
 Scaffold a new screen for: $ARGUMENTS
 
-Default placement is `app/(tabs)/<name>.tsx` (a new tab). If the argument includes `modal`, place it under `app/` as a modal route. If it includes a path like `habits/new`, treat it as a nested route under that tab.
+Default placement is `app/<name>.tsx` (a stack route pushed over the tabs). If the argument includes `tab`, place it under `app/(tabs)/<name>.tsx` and add a `<Tabs.Screen>` entry. If it includes `modal`, place it under `app/` as a modal route. If it includes a path like `habits/new`, treat it as a nested route under that tab.
 
 Steps:
 

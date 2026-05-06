@@ -19,6 +19,7 @@ If a library or feature implies a server, stop and ask before introducing it.
 - Expo SDK 54, React Native 0.81, React 19, TypeScript strict.
 - expo-router 6 (file-based navigation).
 - expo-sqlite for persistence (Phase 2+).
+- State: Zustand for app state. No React Query (overkill for a local-only app).
 - No styling library yet. Design system phase introduces tokens.
 
 ## Setup
@@ -89,7 +90,7 @@ Imports for missing files are silently skipped.
 ```
 lumen/
 ├── app/                        expo-router routes
-│   ├── _layout.tsx             Stack root, "Lumen" header
+│   ├── _layout.tsx             Stack root, no chrome
 │   └── (tabs)/                 4-tab bottom bar
 │       ├── _layout.tsx
 │       ├── index.tsx           Today
