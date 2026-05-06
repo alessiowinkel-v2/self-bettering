@@ -4,11 +4,13 @@ import {
   motion,
   radii,
   spacing,
+  touchTarget,
   type,
   type ColorPalette,
   type Motion,
   type Radii,
   type Spacing,
+  type TouchTarget,
   type TypeStyles,
 } from './tokens';
 
@@ -21,6 +23,7 @@ export type Theme = {
   spacing: Spacing;
   radii: Radii;
   motion: Motion;
+  touchTarget: TouchTarget;
 };
 
 export const darkTheme: Theme = {
@@ -30,6 +33,7 @@ export const darkTheme: Theme = {
   spacing,
   radii,
   motion,
+  touchTarget,
 };
 
 export const lightTheme: Theme = {
@@ -39,6 +43,7 @@ export const lightTheme: Theme = {
   spacing,
   radii,
   motion,
+  touchTarget,
 };
 
 export { ThemeProvider, useTheme, useThemeMode } from './ThemeProvider';

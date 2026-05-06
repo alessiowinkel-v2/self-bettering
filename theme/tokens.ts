@@ -109,6 +109,11 @@ export const radii = {
 } as const;
 export type Radii = typeof radii;
 
+export const touchTarget = {
+  minHeight: 44,
+} as const;
+export type TouchTarget = typeof touchTarget;
+
 export const motion = {
   durations: {
     fast: 120,

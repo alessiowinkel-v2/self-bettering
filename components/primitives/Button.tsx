@@ -62,7 +62,7 @@ export function TextButton({
       hitSlop={8}
       style={({ pressed }) => [
         {
-          minHeight: 44,
+          minHeight: theme.touchTarget.minHeight,
           justifyContent: 'center',
           paddingVertical: theme.spacing[2],
         },
@@ -116,7 +116,7 @@ export function FilledButton({
       hitSlop={4}
       style={({ pressed }) => [
         {
-          minHeight: 44,
+          minHeight: theme.touchTarget.minHeight,
           backgroundColor: theme.colors.accent,
           borderRadius: theme.radii.md,
           paddingHorizontal: theme.spacing[5],

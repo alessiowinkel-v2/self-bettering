@@ -85,7 +85,7 @@ export function ListRow(props: ListRowProps) {
 
   const innerStyle: StyleProp<ViewStyle> = {
     paddingVertical: theme.spacing[4],
-    minHeight: 44,
+    minHeight: theme.touchTarget.minHeight,
     justifyContent: 'center',
   };
 
