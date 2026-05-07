@@ -13,6 +13,7 @@
 
 import migration0001 from './0001_init';
 import migration0002 from './0002_workout_template_rotation_order';
+import migration0003 from './0003_habits_sort_order';
 
 export type Migration = {
   version: number;
@@ -27,4 +28,5 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
     name: '0002_workout_template_rotation_order',
     sql: migration0002,
   },
+  { version: 3, name: '0003_habits_sort_order', sql: migration0003 },
 ];

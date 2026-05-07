@@ -2,6 +2,7 @@ import { parseISO, subDays } from 'date-fns';
 import { seedFor, type SeedName } from '../dev/seedFixtures';
 import { toIsoDate } from '../utils/dateFormat';
 import { getDB } from './db';
+import { createHabit } from './habits';
 
 /**
  * Dev-only seeder. Wipes the domain tables and reinserts rows built from
@@ -32,13 +33,15 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
       DELETE FROM habits;
     `);
 
-    // Habits.
+    // Habits. Routed through createHabit so each row lands at the
+    // production-path sort_order (COALESCE(MAX)+1, scoped to active),
+    // exercising the same write the Habits List uses. The trade-off is
+    // generated ts36-suffixed ids — we keep a fixture-to-real map so
+    // downstream logs and streak backfills still resolve correctly.
+    const fixtureIdToRealId = new Map<string, string>();
     for (const h of seed.habits) {
-      await db.runAsync(
-        `INSERT INTO habits (id, name, created_on, paused_at, deleted_at)
-         VALUES (?, ?, ?, NULL, NULL);`,
-        [h.id, h.name, h.createdOn]
-      );
+      const created = await createHabit({ name: h.name, createdOn: h.createdOn });
+      fixtureIdToRealId.set(h.id, created.id);
     }
 
     // Habit logs. Yesterday + any today logs the seed produced, plus a
@@ -46,11 +49,13 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
     // canonical design-PDF streaks (24, 11, 3) instead of 1.
     const allLogs = [...seed.yesterdayLogs, ...seed.todayLogs];
     for (const log of allLogs) {
-      const id = `hl-${log.habitId}-${log.date}`;
+      const realHabitId = fixtureIdToRealId.get(log.habitId);
+      if (!realHabitId) continue;
+      const id = `hl-${realHabitId}-${log.date}`;
       await db.runAsync(
         `INSERT INTO habit_logs (id, habit_id, date, status, logged_at)
          VALUES (?, ?, ?, ?, ?);`,
-        [id, log.habitId, log.date, log.status, new Date().toISOString()]
+        [id, realHabitId, log.date, log.status, new Date().toISOString()]
       );
     }
 
@@ -65,6 +70,9 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
       const yesterdayLog = seed.yesterdayLogs.find((l) => l.habitId === h.id);
       if (!yesterdayLog || yesterdayLog.status !== 'held') continue;
 
+      const realHabitId = fixtureIdToRealId.get(h.id);
+      if (!realHabitId) continue;
+
       const now = new Date().toISOString();
       let cursor = subDays(parseISO(yesterdayLog.date), 1);
       const cutoff = parseISO(h.createdOn);
@@ -72,11 +80,11 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
       for (let i = 1; i < targetStreak; i += 1) {
         if (cursor < cutoff) break;
         const date = toIsoDate(cursor);
-        const id = `hl-${h.id}-${date}`;
+        const id = `hl-${realHabitId}-${date}`;
         await db.runAsync(
           `INSERT INTO habit_logs (id, habit_id, date, status, logged_at)
            VALUES (?, ?, ?, 'held', ?);`,
-          [id, h.id, date, now]
+          [id, realHabitId, date, now]
         );
         cursor = subDays(cursor, 1);
       }

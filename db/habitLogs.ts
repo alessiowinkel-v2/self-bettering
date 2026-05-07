@@ -1,6 +1,5 @@
 import type { HabitLog, HabitStatus } from '../state/types';
 import { getDB } from './db';
-import { getHabitById } from './habits';
 import { habitLogId } from './ids';
 
 /**
@@ -61,19 +60,46 @@ export async function logHabit(input: {
  * day with no log) breaks it. The walk stops as soon as the streak breaks
  * or the date precedes the habit's creation.
  *
- * The function fetches the habit's `createdOn` itself rather than taking
- * it as input — keeps callers from threading the wrong date if a habit is
- * reset, and keeps the signature minimal at the call site.
+ * The function fetches the habit's `createdOn` and `paused_at` itself
+ * rather than taking them as input — keeps callers from threading stale
+ * dates if a habit is reset or paused, and keeps the signature minimal
+ * at the call site.
+ *
+ * Paused-clamp: when paused_at is non-null, the effective end of the walk
+ * is min(pausedDate, throughDate). The intent is that pausing freezes the
+ * streak — days after the pause are neither held nor slipped, they are
+ * "off the books", so they must not be treated as gaps that would zero
+ * the streak. Active habits (paused_at IS NULL) are unaffected: the
+ * effective end stays equal to throughDate.
  */
 export async function getStreakForHabit(input: {
   habitId: string;
   throughDate: string;
 }): Promise<number> {
-  const habit = await getHabitById(input.habitId);
-  if (!habit) return 0;
-  const createdOn = habit.createdOn;
-
   const db = await getDB();
+  const habitRow = await db.getFirstAsync<{
+    created_on: string;
+    paused_at: string | null;
+  }>(
+    `SELECT created_on, paused_at FROM habits WHERE id = ?;`,
+    [input.habitId]
+  );
+  if (!habitRow) return 0;
+  const createdOn = habitRow.created_on;
+
+  // If the habit is paused, freeze the walk at the pause date. Slicing
+  // the ISO timestamp's date portion is safe because paused_at is always
+  // written via toISOString() and the local-time pause day is what we
+  // want to anchor to (matching how throughDate is also a local-time
+  // YYYY-MM-DD).
+  const pausedDate = habitRow.paused_at
+    ? habitRow.paused_at.slice(0, 10)
+    : null;
+  const effectiveThroughDate =
+    pausedDate !== null && pausedDate < input.throughDate
+      ? pausedDate
+      : input.throughDate;
+
   const rows = await db.getAllAsync<{ date: string; status: HabitStatus }>(
     `SELECT date, status
        FROM habit_logs
@@ -81,7 +107,7 @@ export async function getStreakForHabit(input: {
         AND date <= ?
         AND date >= ?
       ORDER BY date DESC;`,
-    [input.habitId, input.throughDate, createdOn]
+    [input.habitId, effectiveThroughDate, createdOn]
   );
 
   // Index logs by date for O(1) lookup as we walk backwards day by day.
@@ -89,7 +115,7 @@ export async function getStreakForHabit(input: {
   for (const r of rows) byDate.set(r.date, r.status);
 
   let streak = 0;
-  let cursor = input.throughDate;
+  let cursor = effectiveThroughDate;
   while (cursor >= createdOn) {
     const status = byDate.get(cursor);
     if (status === 'held') {

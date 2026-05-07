@@ -8,6 +8,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState, type ComponentType } from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TextButton } from '../components/primitives/Button';
 import { Screen } from '../components/primitives/Screen';
 import { Text } from '../components/primitives/Text';
@@ -73,13 +74,15 @@ export default function RootLayout() {
   if (!fraunces || !inter || !hasHydrated) return null;
 
   return (
-    <ThemeProvider>
-      {bootError ? (
-        <BootErrorScreen message={bootError.message} onRetry={retry} />
-      ) : bootReady ? (
-        <RootStack />
-      ) : null}
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        {bootError ? (
+          <BootErrorScreen message={bootError.message} onRetry={retry} />
+        ) : bootReady ? (
+          <RootStack />
+        ) : null}
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -89,6 +92,7 @@ function RootStack() {
     <>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="add-habit" options={{ presentation: 'modal' }} />
         {__DEV__ ? (
           <Stack.Screen name="design" options={{ presentation: 'modal' }} />
         ) : null}
