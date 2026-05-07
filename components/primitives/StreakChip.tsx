@@ -15,11 +15,12 @@ type StreakChipProps = {
 /**
  * Pill-shaped chip used in the Streaks row on Today and the streak
  * header on Habit Detail. Habit name on the left, streak number on the
- * right. Active chips lift the number into amber; inactive ones keep
- * both in muted text.
+ * right. Active chips render both name and number in amber; inactive
+ * chips render both in muted gray.
  */
 export function StreakChip({ name, streak, active }: StreakChipProps) {
   const theme = useTheme();
+  const tone = active ? 'accent' : 'secondary';
   return (
     <View
       style={{
@@ -32,10 +33,10 @@ export function StreakChip({ name, streak, active }: StreakChipProps) {
         borderRadius: theme.radii.pill,
       }}
     >
-      <Text variant="caption" tone={active ? 'primary' : 'secondary'}>
+      <Text variant="caption" tone={tone}>
         {name}
       </Text>
-      <Text variant="caption" tone={active ? 'accent' : 'secondary'}>
+      <Text variant="caption" tone={tone}>
         {streak}
       </Text>
     </View>

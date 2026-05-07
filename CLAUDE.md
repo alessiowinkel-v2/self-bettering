@@ -69,6 +69,9 @@ If the scan hangs or shows "Network response timed out":
 - `db-architect` — schema, migrations, data-access layer. Read first for any DB work.
 - `ui-builder` — design system and screen composition. Loads frontend-design skill before acting.
 - `reviewer` — staff-engineer critic. Runs at end of each phase. Read-only.
+- `runtime-auditor` — read-only pattern check for runtime-failure shapes (Zustand selectors returning fresh refs, effect dep issues, conditional hooks). Runs at end of phase via `/ship-phase`.
+
+> Adding or renaming an agent file under `.claude/agents/` requires a Claude Code restart. The agent registry is loaded at session start, so newly-tracked files are not dispatchable until the next session.
 
 ## Slash commands
 

@@ -21,6 +21,8 @@ import {
   Text,
   TextButton,
 } from '../components/primitives';
+import { useDevStore } from '../state/devStore';
+import type { SeedName } from '../state/mockData';
 
 const colorRoles: ColorRole[] = [
   'bg',
@@ -46,6 +48,7 @@ const typeSamples: Array<{ role: keyof ReturnType<typeof useTheme>['type']; samp
 ];
 
 const overrideOptions: ThemeOverride[] = ['system', 'dark', 'light'];
+const seedOptions: SeedName[] = ['default', 'first-time', 'today-is-done'];
 
 const habitRows: Array<{ name: string; streak: number }> = [
   { name: 'No nicotine', streak: 24 },
@@ -57,6 +60,8 @@ export default function DesignScreen() {
   const theme = useTheme();
   const override = useThemeStore((s) => s.override);
   const setOverride = useThemeStore((s) => s.setOverride);
+  const activeSeed = useDevStore((s) => s.activeSeed);
+  const applySeed = useDevStore((s) => s.applySeed);
 
   const motionOpacity = useRef(new Animated.Value(0)).current;
 
@@ -87,12 +92,12 @@ export default function DesignScreen() {
           paddingBottom: theme.spacing[8],
         }}
       >
-        <RNText style={[theme.type.display, { color: theme.colors.textPrimary, marginTop: theme.spacing[3] }]}>
+        <Text variant="display" style={{ marginTop: theme.spacing[3] }}>
           Design.
-        </RNText>
-        <RNText style={[theme.type.caption, { color: theme.colors.textSecondary, marginTop: theme.spacing[1] }]}>
+        </Text>
+        <Text variant="caption" tone="secondary" style={{ marginTop: theme.spacing[1] }}>
           Mode override.
-        </RNText>
+        </Text>
 
         <View style={{ flexDirection: 'row', gap: theme.spacing[5], marginTop: theme.spacing[3] }}>
           {overrideOptions.map((opt) => {
@@ -104,6 +109,24 @@ export default function DesignScreen() {
                 tone={active ? 'accent' : 'secondary'}
                 onPress={() => setOverride(opt)}
                 accessibilityLabel={`Set theme override to ${opt}`}
+              />
+            );
+          })}
+        </View>
+
+        <Text variant="caption" tone="secondary" style={{ marginTop: theme.spacing[4] }}>
+          Today seed.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: theme.spacing[5], marginTop: theme.spacing[3] }}>
+          {seedOptions.map((opt) => {
+            const active = activeSeed === opt;
+            return (
+              <TextButton
+                key={opt}
+                label={opt}
+                tone={active ? 'accent' : 'secondary'}
+                onPress={() => applySeed(opt)}
+                accessibilityLabel={`Switch Today seed to ${opt}`}
               />
             );
           })}

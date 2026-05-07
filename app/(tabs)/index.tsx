@@ -3,37 +3,59 @@ import { View } from 'react-native';
 import { Screen, SectionHeader } from '../../components/primitives';
 import {
   AllHeldCard,
+  EmptyToday,
   HabitCard,
   NextWorkoutCard,
+  NoJournalYetCard,
   StreaksRow,
   TodayHeader,
+  TodayIsDone,
   YesterdayCard,
   type StreaksRowItem,
 } from '../../components/today';
 import { useTheme } from '../../theme';
-import { useTodayStore } from '../../state/todayStore';
+import {
+  selectHasJournalToday,
+  selectTodayShapeKind,
+  useTodayStore,
+} from '../../state/todayStore';
+import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
 
 /**
  * Today screen. Canonical vertical order from the design PDF:
- *   1. Title + date + greeting
- *   2. Habit cards (or "All held today." takeover when every habit is held)
- *   3. Streaks chip row
- *   4. Yesterday peek card
- *   5. Next workout card
+ *   1. Title + date + greeting (always rendered)
+ *   2. Body — varies by shape:
+ *        'empty'         → "Add your first habit to begin." + filled CTA
+ *        'today-is-done' → "Today is done." takeover + Streaks
+ *        'default'       → Habit cards (or AllHeld) + Streaks +
+ *                          Yesterday slot (YesterdayCard | NoJournalYetCard) +
+ *                          Next workout (when queued)
  *
- * Phase 1c: mock data only. Tapping Held / Slipped writes to the in-memory
- * store and survives navigation. Tapping the Yesterday card or Start on the
- * Next workout card no-ops for now — the routes wire up in 1d / Phase 2.
+ * Architecture note: derived values (habitsWithStatus, allHeld, nextWorkout,
+ * displayStreak) are computed inline via useMemo from primitive store
+ * fields. Selectors that returned freshly-built arrays/objects triggered
+ * useSyncExternalStore's Object.is equality guard and looped infinitely.
+ * Subscribing to primitives and deriving in render is the correct pattern
+ * for this store; the minor duplication beats the equality bug.
+ *
+ * Phase 1c.5: shape comes from selectTodayShapeKind. Tapping Held / Slipped
+ * still writes to the in-memory store; routing for "Add a habit", the
+ * Yesterday card, "Write", and "Start" no-ops until Phase 1d / Phase 2.
  */
 export default function TodayScreen() {
   const theme = useTheme();
+
+  // Shape decides the body layout. Two primitive selectors — a single
+  // object-returning selector loops under Zustand's Object.is equality.
+  const shapeKind = useTodayStore(selectTodayShapeKind);
+  const hasJournalToday = useTodayStore(selectHasJournalToday);
 
   // Select reference-stable slices. Derivation happens in useMemo below so the
   // store's snapshot stays cached — selectors that returned freshly mapped
   // arrays on every read triggered useSyncExternalStore's infinite-loop guard.
   const habits = useTodayStore((s) => s.habits);
   const todayLogs = useTodayStore((s) => s.todayLogs);
-  const streaksThroughYesterday = useTodayStore((s) => s.streaksThroughYesterday);
+  const mockStreaksThroughYesterday = useTodayStore((s) => s.mockStreaksThroughYesterday);
   const yesterdayJournal = useTodayStore((s) => s.yesterdayJournal);
   const workoutTemplates = useTodayStore((s) => s.workoutTemplates);
   const nextWorkoutTemplateId = useTodayStore((s) => s.nextWorkoutTemplateId);
@@ -52,12 +74,12 @@ export default function TodayScreen() {
     () =>
       habits.map((habit) => {
         const status = todayStatus.get(habit.id) ?? null;
-        const base = streaksThroughYesterday[habit.id] ?? 0;
+        const base = mockStreaksThroughYesterday[habit.id] ?? 0;
         const displayStreak =
           status === 'held' ? base + 1 : status === 'slipped' ? 0 : base;
         return { habit, status, streakThroughYesterday: base, displayStreak };
       }),
-    [habits, todayStatus, streaksThroughYesterday],
+    [habits, todayStatus, mockStreaksThroughYesterday],
   );
 
   const allHeld = useMemo(
@@ -76,7 +98,7 @@ export default function TodayScreen() {
     () =>
       habitsWithStatus.map((row) => ({
         habitId: row.habit.id,
-        name: row.habit.name,
+        name: abbreviateHabitName(row.habit.name),
         streak: row.displayStreak,
         active:
           row.status === 'held' || (row.status === null && row.streakThroughYesterday > 0),
@@ -84,6 +106,27 @@ export default function TodayScreen() {
     [habitsWithStatus],
   );
 
+  if (shapeKind === 'empty') {
+    return (
+      <Screen>
+        <TodayHeader />
+        <EmptyToday onAddHabit={() => {}} />
+      </Screen>
+    );
+  }
+
+  if (shapeKind === 'today-is-done') {
+    return (
+      <Screen>
+        <TodayHeader />
+        <TodayIsDone />
+        <SectionHeader>Streaks</SectionHeader>
+        <StreaksRow items={streakItems} />
+      </Screen>
+    );
+  }
+
+  // 'default'
   return (
     <Screen>
       <TodayHeader />
@@ -108,8 +151,14 @@ export default function TodayScreen() {
       <SectionHeader>Streaks</SectionHeader>
       <StreaksRow items={streakItems} />
 
-      <SectionHeader>Yesterday</SectionHeader>
-      <YesterdayCard entry={yesterdayJournal} onPress={() => {}} />
+      {yesterdayJournal !== null ? (
+        <>
+          <SectionHeader>Yesterday</SectionHeader>
+          <YesterdayCard entry={yesterdayJournal} onPress={() => {}} />
+        </>
+      ) : !hasJournalToday ? (
+        <NoJournalYetCard onWrite={() => {}} />
+      ) : null}
 
       {nextWorkout ? (
         <>

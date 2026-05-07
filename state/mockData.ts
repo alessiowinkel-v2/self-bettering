@@ -1,4 +1,4 @@
-import { yesterdayIso } from '../utils/dateFormat';
+import { todayIso, yesterdayIso } from '../utils/dateFormat';
 import type {
   Habit,
   HabitLog,
@@ -12,7 +12,7 @@ import type {
  * change when persistence lands.
  *
  * Logs are seeded for yesterday only. Today's logs start empty so the
- * Held/Slipped affordances render on first load.
+ * Held/Slipped affordances render on first load (default seed).
  */
 
 export const seedHabits: ReadonlyArray<Habit> = [
@@ -22,12 +22,12 @@ export const seedHabits: ReadonlyArray<Habit> = [
 ];
 
 /**
- * Streak counts coming into today. The streak math will live in a pure
- * util in Phase 2 once we have a real log history. For Phase 1c we
- * pre-compute the "current streak through yesterday" so the cards have
- * the right amber number.
+ * Mock streak counts coming into today. Phase-1 mock only: Phase 2 will
+ * derive current streak as a pure function over `habit_logs`, not as a
+ * denormalized lookup. Pre-computed here so the cards have the right
+ * amber number on first load.
  */
-export const seedStreaksThroughYesterday: Readonly<Record<string, number>> = {
+export const mockStreaksThroughYesterday: Readonly<Record<string, number>> = {
   'h-nicotine': 24,
   'h-walk': 11,
   'h-read': 3,
@@ -78,3 +78,98 @@ export const seedWorkoutTemplates: ReadonlyArray<WorkoutTemplate> = [
  * with a text "Start" affordance (per the known-issue note — never filled).
  */
 export const seedNextWorkoutTemplateId = 'wt-push-a';
+
+/* --------------------------------- Seed sets ------------------------------- */
+
+/**
+ * Named seed set. Each option corresponds to a specific Today shape so the
+ * /design dev menu can swap the entire store slice and preview the screen
+ * without changing the phone clock or hand-rolling state.
+ */
+export type SeedName = 'default' | 'first-time' | 'today-is-done';
+
+/**
+ * The full slice of state the Today store holds. Returned by `seedFor` so
+ * the store can rebuild itself wholesale when the dev menu picks a new seed.
+ */
+export type TodaySeed = {
+  habits: ReadonlyArray<Habit>;
+  todayLogs: ReadonlyArray<HabitLog>;
+  yesterdayLogs: ReadonlyArray<HabitLog>;
+  yesterdayJournal: JournalEntry | null;
+  todayJournal: JournalEntry | null;
+  mockStreaksThroughYesterday: Readonly<Record<string, number>>;
+  workoutTemplates: ReadonlyArray<WorkoutTemplate>;
+  nextWorkoutTemplateId: string | null;
+  completedWorkoutDate: string | null;
+  referenceDate: string;
+};
+
+/**
+ * Build the full Today-store slice for a given named seed. Pure factory —
+ * no I/O, no module-level state. The store calls this on init and again
+ * whenever the dev menu picks a different seed.
+ */
+export function seedFor(name: SeedName, now: Date = new Date()): TodaySeed {
+  const referenceDate = todayIso(now);
+
+  if (name === 'first-time') {
+    return {
+      habits: [],
+      todayLogs: [],
+      yesterdayLogs: [],
+      yesterdayJournal: null,
+      todayJournal: null,
+      mockStreaksThroughYesterday: {},
+      workoutTemplates: [],
+      nextWorkoutTemplateId: null,
+      completedWorkoutDate: null,
+      referenceDate,
+    };
+  }
+
+  if (name === 'today-is-done') {
+    // Same three habits as default, but every habit is held today, the
+    // journal has an entry for today, and the next workout has been done.
+    // nextWorkoutTemplateId is cleared defensively so the "Next workout"
+    // card can't render alongside the takeover.
+    const todayLogs: ReadonlyArray<HabitLog> = seedHabits.map((h) => ({
+      habitId: h.id,
+      date: referenceDate,
+      status: 'held',
+    }));
+    const todayJournal: JournalEntry = {
+      date: referenceDate,
+      mood: 4,
+      tags: ['evening'],
+      body: 'Quiet day. Held everything.',
+    };
+    return {
+      habits: seedHabits,
+      todayLogs,
+      yesterdayLogs: seedYesterdayLogs(now),
+      yesterdayJournal: seedYesterdayJournal(now),
+      todayJournal,
+      mockStreaksThroughYesterday: mockStreaksThroughYesterday,
+      workoutTemplates: seedWorkoutTemplates,
+      nextWorkoutTemplateId: null,
+      completedWorkoutDate: referenceDate,
+      referenceDate,
+    };
+  }
+
+  // 'default' — current behavior. Habits exist, nothing logged today yet,
+  // yesterday's journal populated, Push A queued, no workout completed.
+  return {
+    habits: seedHabits,
+    todayLogs: [],
+    yesterdayLogs: seedYesterdayLogs(now),
+    yesterdayJournal: seedYesterdayJournal(now),
+    todayJournal: null,
+    mockStreaksThroughYesterday: mockStreaksThroughYesterday,
+    workoutTemplates: seedWorkoutTemplates,
+    nextWorkoutTemplateId: seedNextWorkoutTemplateId,
+    completedWorkoutDate: null,
+    referenceDate,
+  };
+}

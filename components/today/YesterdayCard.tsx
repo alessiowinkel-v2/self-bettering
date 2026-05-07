@@ -2,7 +2,7 @@ import { View } from 'react-native';
 import { useTheme } from '../../theme';
 import { Card, Text } from '../primitives';
 import type { JournalEntry } from '../../state/types';
-import { formatWeekday } from '../../utils/dateFormat';
+import { formatWeekdayWithDate } from '../../utils/dateFormat';
 import { MoodDots } from './MoodDots';
 
 type YesterdayCardProps = {
@@ -18,7 +18,7 @@ type YesterdayCardProps = {
  */
 export function YesterdayCard({ entry, onPress }: YesterdayCardProps) {
   const theme = useTheme();
-  const weekday = formatWeekday(entry.date);
+  const weekday = formatWeekdayWithDate(entry.date);
 
   return (
     <Card onPress={onPress} accessibilityLabel={`Open journal entry for ${weekday}`}>

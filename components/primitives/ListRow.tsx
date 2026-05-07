@@ -96,8 +96,11 @@ export function ListRow(props: ListRowProps) {
     gap: theme.spacing[3],
   };
 
+  // props.style insets the row content but NOT the trailing divider — the
+  // divider stays full-bleed within the outer container so it spans the
+  // card edge-to-edge regardless of the row's horizontal padding.
   const content = (
-    <View style={innerStyle}>
+    <View style={[innerStyle, props.style]}>
       <View style={headerRowStyle}>
         <View style={{ flexShrink: 1 }}>{props.left}</View>
         {props.right !== undefined ? <View>{props.right}</View> : null}
@@ -122,7 +125,7 @@ export function ListRow(props: ListRowProps) {
   );
 
   return (
-    <View style={props.style}>
+    <View>
       {wrapper}
       {!isLast ? (
         <View

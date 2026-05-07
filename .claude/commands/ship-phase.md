@@ -17,8 +17,12 @@ Stop and surface failures rather than continuing past them. Do not auto-fix; rep
 
 If any check fails: stop, show the error, and wait. Do not invoke the reviewer on a broken build.
 
-If all pass: invoke the `reviewer` subagent. Pass it:
+If all pass: invoke the `reviewer` subagent, then the `runtime-auditor` subagent. Pass each the same payload:
 - The current branch's diff against `main` (use `git diff main...HEAD`).
 - A one-paragraph summary of what this phase added, derived from recent commits.
 
-Print the reviewer's full report back without summarizing.
+Print both full reports back-to-back without summarizing, in this order:
+1. Reviewer report — design and architecture concerns.
+2. Runtime auditor report — runtime-failure pattern scan.
+
+If one of the two agents errors out, surface the failure and continue to the other. Never block the whole flow on a single agent's tooling hiccup.

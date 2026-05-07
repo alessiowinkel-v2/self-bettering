@@ -37,7 +37,10 @@ export function formatShortDate(iso: string): string {
   return format(parseISO(iso), 'MMM d');
 }
 
-/** Weekday word for a previous date — e.g. "Yesterday" header context. */
-export function formatWeekday(iso: string): string {
-  return format(parseISO(iso), 'EEEE');
+/**
+ * Weekday plus month-day, e.g. "Tuesday, May 5". Used on the Yesterday
+ * card so the date context is explicit rather than inferred.
+ */
+export function formatWeekdayWithDate(iso: string): string {
+  return format(parseISO(iso), 'EEEE, MMMM d');
 }
