@@ -40,11 +40,3 @@ export type WorkoutTemplate = {
   /** Ordered exercise names, used by the "Next workout" preview line. */
   exercises: ReadonlyArray<string>;
 };
-
-export type Workout = {
-  id: string;
-  templateId: string;
-  /** ISO date (YYYY-MM-DD) the workout was completed. */
-  date: string;
-  durationMinutes: number;
-};

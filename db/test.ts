@@ -14,7 +14,7 @@ import { seedDev } from './seedDev';
 import { logSet } from './sets';
 import {
   completeWorkout,
-  getMostRecentCompletedWorkout,
+  getMostRecentCompletedWorkoutDate,
   getWorkoutTemplates,
   insertWorkoutTemplate,
   startWorkout,
@@ -175,33 +175,30 @@ export async function runDbTests(): Promise<{
     })
   );
 
-  // 8. Workout completion: per-template filter, ignores in-progress, and
-  //    a newer completion on a different template does not bleed through.
+  // 8. Most recent completed date: ignores in-progress workouts and
+  //    returns the YYYY-MM-DD slice of the latest completion across all
+  //    templates.
   results.push(
-    await runOne('most recent completed filters by template and ignores in-progress', async () => {
+    await runOne('most recent completed date excludes in-progress and returns latest', async () => {
       await seedDev('default');
       const templates = await getWorkoutTemplates();
       await assert(templates.length >= 2, 'Expected at least two seeded templates.');
       const [t1, t2] = templates;
 
-      // t1: complete an older workout, then start an in-progress one that
-      // must NOT be returned.
-      const t1Done = await startWorkout({ templateId: t1.id, startedAt: '2026-05-06T08:00:00.000Z' });
-      await completeWorkout({ id: t1Done.id, completedAt: '2026-05-06T08:30:00.000Z', durationSeconds: 1800 });
+      // Two completed workouts on different dates and templates.
+      const earlier = await startWorkout({ templateId: t1.id, startedAt: '2026-05-05T08:00:00.000Z' });
+      await completeWorkout({ id: earlier.id, completedAt: '2026-05-05T08:30:00.000Z', durationSeconds: 1800 });
+      const later = await startWorkout({ templateId: t2.id, startedAt: '2026-05-06T09:00:00.000Z' });
+      await completeWorkout({ id: later.id, completedAt: '2026-05-06T09:45:00.000Z', durationSeconds: 2700 });
+
+      // A third workout that is started but never completed. Its later
+      // started_at must not bleed into the result — only completed_at
+      // counts.
       await startWorkout({ templateId: t1.id, startedAt: '2026-05-07T08:00:00.000Z' });
 
-      // t2: a newer completed workout. Must NOT be returned for t1.
-      const t2Done = await startWorkout({ templateId: t2.id, startedAt: '2026-05-07T09:00:00.000Z' });
-      await completeWorkout({ id: t2Done.id, completedAt: '2026-05-07T09:45:00.000Z', durationSeconds: 2700 });
-
-      const t1Recent = await getMostRecentCompletedWorkout(t1.id);
-      await assert(t1Recent !== null, 'Expected a completed workout for t1.');
-      await assertEqual(t1Recent!.id, t1Done.id, 'In-progress and other-template results should be excluded.');
-      await assertEqual(t1Recent!.date, '2026-05-06', 'Date derived from completed_at.');
-
-      const t2Recent = await getMostRecentCompletedWorkout(t2.id);
-      await assert(t2Recent !== null, 'Expected a completed workout for t2.');
-      await assertEqual(t2Recent!.id, t2Done.id, 'Per-template filter returns t2 own workout.');
+      const recent = await getMostRecentCompletedWorkoutDate();
+      await assertEqual(recent, '2026-05-06', 'Latest completed date wins, in-progress ignored.');
+      await assert(recent !== null && recent.length === 10, 'Result is a YYYY-MM-DD slice.');
     })
   );
 

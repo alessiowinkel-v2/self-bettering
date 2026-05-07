@@ -31,16 +31,18 @@ import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
  *                          Yesterday slot (YesterdayCard | NoJournalYetCard) +
  *                          Next workout (when queued)
  *
- * Architecture note: derived values (habitsWithStatus, allHeld, nextWorkout,
- * displayStreak) are computed inline via useMemo from primitive store
- * fields. Selectors that returned freshly-built arrays/objects triggered
- * useSyncExternalStore's Object.is equality guard and looped infinitely.
- * Subscribing to primitives and deriving in render is the correct pattern
- * for this store; the minor duplication beats the equality bug.
+ * Architecture note: derived values (habitsWithStatus, allHeld, nextWorkout)
+ * are computed inline via useMemo from primitive store fields. Selectors
+ * that returned freshly-built arrays/objects triggered useSyncExternalStore's
+ * Object.is equality guard and looped infinitely. Subscribing to primitives
+ * and deriving in render is the correct pattern for this store; the minor
+ * duplication beats the equality bug.
  *
- * Phase 1c.5: shape comes from selectTodayShapeKind. Tapping Held / Slipped
- * still writes to the in-memory store; routing for "Add a habit", the
- * Yesterday card, "Write", and "Start" no-ops until Phase 1d / Phase 2.
+ * Phase 2b: Held / Slipped writes go through the DB via the store's
+ * logHabit action; the store is a hydration cache populated on boot.
+ * The streak chip number is the streak as of end-of-yesterday — today's
+ * hold or slip does not change it. Visual feedback for today's status is
+ * the card collapsing to "HELD" or "SLIPPED", not the number moving.
  */
 export default function TodayScreen() {
   const theme = useTheme();
@@ -55,11 +57,11 @@ export default function TodayScreen() {
   // arrays on every read triggered useSyncExternalStore's infinite-loop guard.
   const habits = useTodayStore((s) => s.habits);
   const todayLogs = useTodayStore((s) => s.todayLogs);
-  const mockStreaksThroughYesterday = useTodayStore((s) => s.mockStreaksThroughYesterday);
+  const streaksThroughYesterday = useTodayStore((s) => s.streaksThroughYesterday);
   const yesterdayJournal = useTodayStore((s) => s.yesterdayJournal);
   const workoutTemplates = useTodayStore((s) => s.workoutTemplates);
   const nextWorkoutTemplateId = useTodayStore((s) => s.nextWorkoutTemplateId);
-  const setHabitStatus = useTodayStore((s) => s.setHabitStatus);
+  const logHabit = useTodayStore((s) => s.logHabit);
 
   // Build an O(1) status lookup once per logs/habits change. The store's
   // canonical shape is HabitLog[] (mirrors the Phase 2 schema); the map
@@ -74,12 +76,10 @@ export default function TodayScreen() {
     () =>
       habits.map((habit) => {
         const status = todayStatus.get(habit.id) ?? null;
-        const base = mockStreaksThroughYesterday[habit.id] ?? 0;
-        const displayStreak =
-          status === 'held' ? base + 1 : status === 'slipped' ? 0 : base;
-        return { habit, status, streakThroughYesterday: base, displayStreak };
+        const streakThroughYesterday = streaksThroughYesterday[habit.id] ?? 0;
+        return { habit, status, streakThroughYesterday };
       }),
-    [habits, todayStatus, mockStreaksThroughYesterday],
+    [habits, todayStatus, streaksThroughYesterday],
   );
 
   const allHeld = useMemo(
@@ -99,7 +99,7 @@ export default function TodayScreen() {
       habitsWithStatus.map((row) => ({
         habitId: row.habit.id,
         name: abbreviateHabitName(row.habit.name),
-        streak: row.displayStreak,
+        streak: row.streakThroughYesterday,
         active:
           row.status === 'held' || (row.status === null && row.streakThroughYesterday > 0),
       })),
@@ -139,10 +139,10 @@ export default function TodayScreen() {
             <HabitCard
               key={row.habit.id}
               name={row.habit.name}
-              displayStreak={row.displayStreak}
+              streak={row.streakThroughYesterday}
               status={row.status}
-              onHeld={() => setHabitStatus(row.habit.id, 'held')}
-              onSlipped={() => setHabitStatus(row.habit.id, 'slipped')}
+              onHeld={() => logHabit(row.habit.id, 'held')}
+              onSlipped={() => logHabit(row.habit.id, 'slipped')}
             />
           ))
         )}

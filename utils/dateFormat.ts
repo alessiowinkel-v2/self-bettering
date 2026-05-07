@@ -29,15 +29,6 @@ export function formatTodayHeaderDate(now: Date = new Date()): string {
 }
 
 /**
- * Short month-day used in "Since Apr 12." style copy on Habit Detail.
- * Kept here so the format string is shared with the Yesterday card's
- * weekday line.
- */
-export function formatShortDate(iso: string): string {
-  return format(parseISO(iso), 'MMM d');
-}
-
-/**
  * Weekday plus month-day, e.g. "Tuesday, May 5". Used on the Yesterday
  * card so the date context is explicit rather than inferred.
  */

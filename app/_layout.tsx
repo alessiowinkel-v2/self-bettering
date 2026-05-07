@@ -6,11 +6,13 @@ import {
 import { Inter_400Regular, Inter_500Medium, useFonts as useInter } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useState, type ComponentType } from 'react';
 import { View } from 'react-native';
+import { TextButton } from '../components/primitives/Button';
 import { Screen } from '../components/primitives/Screen';
 import { Text } from '../components/primitives/Text';
 import { runMigrations } from '../db/migrate';
+import { useTodayStore } from '../state/todayStore';
 import { ThemeProvider, useTheme, useThemeMode, useThemeStore } from '../theme';
 
 // Dev-only floating affordance for /design. Conditional require so Metro
@@ -30,32 +32,51 @@ export default function RootLayout() {
   const [inter] = useInter({ Inter_400Regular, Inter_500Medium });
   const hasHydrated = useThemeStore((s) => s._hasHydrated);
 
-  const [dbReady, setDbReady] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
+  const [bootReady, setBootReady] = useState(false);
+  const [bootError, setBootError] = useState<{ message: string } | null>(null);
+  // Bumping this re-runs the boot effect. Retry from BootErrorScreen
+  // increments it.
+  //
+  // cancelled (below) guards the React state updates (setBootReady /
+  // setBootError) from stale resolutions on unmount or retry. It does
+  // NOT cancel the work itself or guard the store's set() inside
+  // hydrate(). Today this is safe because hydrate() only runs after
+  // migrations succeed, and once boot has errored, the prior chain has
+  // already rejected before reaching hydrate. If a future caller runs
+  // hydrate() while another is in flight (e.g. day-rollover refresh in
+  // Phase 4), revisit with an epoch guard inside hydrate().
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
+    setBootError(null);
+    setBootReady(false);
     let cancelled = false;
     runMigrations()
+      .then(() => useTodayStore.getState().hydrate())
       .then(() => {
-        if (!cancelled) setDbReady(true);
+        if (!cancelled) setBootReady(true);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         const message = e instanceof Error ? e.message : String(e);
-        setDbError(message);
+        setBootError({ message });
       });
     return () => {
       cancelled = true;
     };
+  }, [bootAttempt]);
+
+  const retry = useCallback(() => {
+    setBootAttempt((n) => n + 1);
   }, []);
 
   if (!fraunces || !inter || !hasHydrated) return null;
 
   return (
     <ThemeProvider>
-      {dbError ? (
-        <MigrationErrorScreen message={dbError} />
-      ) : dbReady ? (
+      {bootError ? (
+        <BootErrorScreen message={bootError.message} onRetry={retry} />
+      ) : bootReady ? (
         <RootStack />
       ) : null}
     </ThemeProvider>
@@ -68,7 +89,9 @@ function RootStack() {
     <>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="design" options={{ presentation: 'modal' }} />
+        {__DEV__ ? (
+          <Stack.Screen name="design" options={{ presentation: 'modal' }} />
+        ) : null}
       </Stack>
       {__DEV__ && DesignFloatingLink ? <DesignFloatingLink /> : null}
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
@@ -76,32 +99,38 @@ function RootStack() {
   );
 }
 
-function MigrationErrorScreen({ message }: { message: string }) {
+function BootErrorScreen({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   const mode = useThemeMode();
   const { spacing } = useTheme();
   return (
     <>
       <Screen scroll={false}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text variant="displayItalic" italic align="center">
-            Migration failed.
+          <Text variant="displayItalic" align="center">
+            Something broke.
           </Text>
           <Text
-            variant="caption"
-            tone="secondary"
+            variant="body"
+            tone="tertiary"
             align="center"
+            numberOfLines={4}
             style={{ marginTop: spacing[3] }}
           >
             {message}
           </Text>
-          <Text
-            variant="caption"
-            tone="secondary"
-            align="center"
-            style={{ marginTop: spacing[3] }}
-          >
-            Force-quit and reopen.
-          </Text>
+          <View style={{ marginTop: spacing[5] }}>
+            <TextButton
+              label="Try again."
+              onPress={onRetry}
+              accessibilityLabel="Try again."
+            />
+          </View>
         </View>
       </Screen>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

@@ -33,18 +33,6 @@ export async function getLogsForDate(date: string): Promise<ReadonlyArray<HabitL
   return rows.map(rowToLog);
 }
 
-export async function getLogsForHabit(habitId: string): Promise<ReadonlyArray<HabitLog>> {
-  const db = await getDB();
-  const rows = await db.getAllAsync<HabitLogRow>(
-    `SELECT habit_id, date, status
-       FROM habit_logs
-      WHERE habit_id = ?
-      ORDER BY date DESC;`,
-    [habitId]
-  );
-  return rows.map(rowToLog);
-}
-
 /**
  * Upsert a log. The UNIQUE(habit_id, date) constraint makes ON CONFLICT
  * trivial — a second tap on Held/Slipped overwrites the first.

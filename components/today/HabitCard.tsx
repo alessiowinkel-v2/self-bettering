@@ -5,11 +5,8 @@ import type { HabitStatus } from '../../state/types';
 
 type HabitCardProps = {
   name: string;
-  /**
-   * Streak number as it should display today. The store's selector already
-   * folds in today's status, so the card just renders.
-   */
-  displayStreak: number;
+  /** Streak as of end of yesterday. */
+  streak: number;
   /** null = not yet logged today (expanded). 'held' | 'slipped' = collapsed. */
   status: HabitStatus | null;
   onHeld: () => void;
@@ -26,7 +23,7 @@ type HabitCardProps = {
  *     so the rhythm of three card-shaped slots holds steady mid-tap. Right
  *     side is "HELD" or "SLIPPED" in small-caps amber/muted.
  */
-export function HabitCard({ name, displayStreak, status, onHeld, onSlipped }: HabitCardProps) {
+export function HabitCard({ name, streak, status, onHeld, onSlipped }: HabitCardProps) {
   const theme = useTheme();
   const collapsed = status !== null;
 
@@ -56,7 +53,7 @@ export function HabitCard({ name, displayStreak, status, onHeld, onSlipped }: Ha
           </Text>
         ) : (
           <Text variant="streakAccent" tone="accent">
-            {displayStreak}
+            {streak}
           </Text>
         )}
       </View>

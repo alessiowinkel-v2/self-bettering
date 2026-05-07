@@ -1,19 +1,29 @@
-// Dev-only state. Must not survive into Phase 2's SQLite layer.
+// Dev-only state. Must not survive into production builds.
 import { create } from 'zustand';
-import { seedFor, type SeedName } from './mockData';
+import { seedDev } from '../db/seedDev';
+import type { SeedName } from '../dev/seedFixtures';
 import { useTodayStore } from './todayStore';
 
 type DevStoreState = {
   activeSeed: SeedName;
-  /** Replace today-store slice from a named seed and remember the choice. */
-  applySeed: (name: SeedName) => void;
+  /**
+   * Wipe and reseed the DB to a named fixture, then re-hydrate the Today
+   * store cache so the screen reflects the new rows. Remembers the choice
+   * so the dev menu can highlight which seed is active.
+   */
+  applySeed: (name: SeedName) => Promise<void>;
 };
 
 export const useDevStore = create<DevStoreState>((set) => ({
   activeSeed: 'default',
-  applySeed: (name) => {
-    const seed = seedFor(name, new Date());
-    useTodayStore.setState({ ...seed });
+  // Single-writer assumption: the user is the only writer
+  // and double-taps under ~10ms are not realistic. If a
+  // future phase introduces concurrent mutations (background
+  // sync, multi-touch gestures), revisit for in-flight
+  // guards.
+  applySeed: async (name) => {
+    await seedDev(name);
+    await useTodayStore.getState().hydrate();
     set({ activeSeed: name });
   },
 }));

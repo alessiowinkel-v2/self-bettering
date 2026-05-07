@@ -1,12 +1,12 @@
 import { parseISO, subDays } from 'date-fns';
-import { seedFor, type SeedName } from '../state/mockData';
+import { seedFor, type SeedName } from '../dev/seedFixtures';
 import { toIsoDate } from '../utils/dateFormat';
 import { getDB } from './db';
 
 /**
  * Dev-only seeder. Wipes the domain tables and reinserts rows built from
- * mockData's `seedFor()`, so the data layer can be exercised against the
- * exact shapes the Today screen already understands.
+ * seedFixtures' `seedFor()`, so the data layer can be exercised against
+ * the exact shapes the Today screen already understands.
  *
  * The `_migrations` table is left untouched — schema state survives the
  * wipe so we don't reapply migrations on every seed.
@@ -59,7 +59,7 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
     // yesterday. Yesterday's log already exists from seedYesterdayLogs.
     // Stops if the cursor would precede the habit's createdOn.
     for (const h of seed.habits) {
-      const targetStreak = seed.mockStreaksThroughYesterday[h.id] ?? 0;
+      const targetStreak = seed.targetStreaks[h.id] ?? 0;
       if (targetStreak < 2) continue;
 
       const yesterdayLog = seed.yesterdayLogs.find((l) => l.habitId === h.id);
@@ -99,8 +99,9 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
     // Workout templates.
     for (const t of seed.workoutTemplates) {
       await db.runAsync(
-        `INSERT INTO workout_templates (id, name, exercises) VALUES (?, ?, ?);`,
-        [t.id, t.name, JSON.stringify(t.exercises)]
+        `INSERT INTO workout_templates (id, name, exercises, rotation_order)
+         VALUES (?, ?, ?, ?);`,
+        [t.id, t.name, JSON.stringify(t.exercises), t.rotationOrder]
       );
     }
 

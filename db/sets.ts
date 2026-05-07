@@ -18,42 +18,6 @@ export type SetRow = {
   loggedAt: string;
 };
 
-type RawSetRow = {
-  id: string;
-  workout_id: string;
-  exercise_name: string;
-  set_number: number;
-  kg: number | null;
-  reps: number | null;
-  logged_at: string;
-};
-
-function rowToSet(row: RawSetRow): SetRow {
-  return {
-    id: row.id,
-    workoutId: row.workout_id,
-    exerciseName: row.exercise_name,
-    setNumber: row.set_number,
-    kg: row.kg,
-    reps: row.reps,
-    loggedAt: row.logged_at,
-  };
-}
-
-export async function getSetsForWorkout(
-  workoutId: string
-): Promise<ReadonlyArray<SetRow>> {
-  const db = await getDB();
-  const rows = await db.getAllAsync<RawSetRow>(
-    `SELECT id, workout_id, exercise_name, set_number, kg, reps, logged_at
-       FROM sets
-      WHERE workout_id = ?
-      ORDER BY logged_at ASC;`,
-    [workoutId]
-  );
-  return rows.map(rowToSet);
-}
-
 export async function logSet(input: {
   workoutId: string;
   exerciseName: string;

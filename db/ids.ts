@@ -7,7 +7,6 @@
  *   journal_entries    j-${dateStr}            (date is the natural key)
  *   workouts           w-${ts36}
  *   sets               s-${ts36}-${setNum}
- *   workout_templates  wt-${slug}
  *
  * `slug` lowercases, replaces non-alphanumeric runs with `-`, and trims
  * leading/trailing dashes. `ts36` = `Date.now().toString(36)`.
@@ -44,8 +43,4 @@ export function workoutId(): string {
 
 export function setId(setNumber: number): string {
   return `s-${ts36()}-${setNumber}`;
-}
-
-export function workoutTemplateId(name: string): string {
-  return `wt-${slug(name)}`;
 }

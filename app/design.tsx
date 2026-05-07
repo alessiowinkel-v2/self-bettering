@@ -22,7 +22,16 @@ import {
   TextButton,
 } from '../components/primitives';
 import { useDevStore } from '../state/devStore';
-import type { SeedName } from '../state/mockData';
+import type { SeedName } from '../dev/seedFixtures';
+
+// Match the DesignFloatingLink pattern in app/_layout.tsx — Metro
+// dead-code-eliminates the require() and the entire transitive db/test
+// dependency tree under !__DEV__, so production bundles do not ship the
+// smoke-test runner or the seed-fixtures it pulls in.
+const runDbTests: (() => Promise<unknown>) | null = __DEV__
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ? (require('../db/test').runDbTests as () => Promise<unknown>)
+  : null;
 
 const colorRoles: ColorRole[] = [
   'bg',
@@ -56,7 +65,17 @@ const habitRows: Array<{ name: string; streak: number }> = [
   { name: 'Read 20 minutes', streak: 3 },
 ];
 
+// Belt + suspenders gating. _layout.tsx omits this route from the Stack
+// in production, but the file still exists in the bundle and could be
+// reached via a deep link or stale navigation state. Returning null at
+// the top of the component renders nothing and keeps the dev-only DB
+// reset button out of any production-reachable surface.
 export default function DesignScreen() {
+  if (!__DEV__) return null;
+  return <DesignScreenBody />;
+}
+
+function DesignScreenBody() {
   const theme = useTheme();
   const override = useThemeStore((s) => s.override);
   const setOverride = useThemeStore((s) => s.setOverride);
@@ -130,6 +149,22 @@ export default function DesignScreen() {
               />
             );
           })}
+        </View>
+
+        <View style={{ marginTop: theme.spacing[4] }}>
+          <TextButton
+            label="run db tests"
+            onPress={async () => {
+              if (!runDbTests) return;
+              const r = await runDbTests();
+              // eslint-disable-next-line no-console
+              console.log('[db tests]', r);
+            }}
+            accessibilityLabel="Run database smoke tests"
+          />
+          <Text variant="caption" tone="secondary" style={{ marginTop: theme.spacing[1] }}>
+            Output in Metro console.
+          </Text>
         </View>
 
         <RNText style={sectionHeading}>Type.</RNText>

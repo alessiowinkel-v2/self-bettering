@@ -4,15 +4,12 @@ import type {
   HabitLog,
   JournalEntry,
   WorkoutTemplate,
-} from './types';
+} from '../state/types';
 
 /**
- * Seed data for Phase 1c. The shapes match what the SQLite data-access
- * layer will return in Phase 2, so the screens consuming these never
- * change when persistence lands.
- *
- * Logs are seeded for yesterday only. Today's logs start empty so the
- * Held/Slipped affordances render on first load (default seed).
+ * Seed fixtures for dev mode. Inputs to db/seedDev, which wipes the
+ * domain tables and re-inserts these rows. The shapes match the
+ * domain types in state/types.ts.
  */
 
 export const seedHabits: ReadonlyArray<Habit> = [
@@ -22,12 +19,12 @@ export const seedHabits: ReadonlyArray<Habit> = [
 ];
 
 /**
- * Mock streak counts coming into today. Phase-1 mock only: Phase 2 will
- * derive current streak as a pure function over `habit_logs`, not as a
- * denormalized lookup. Pre-computed here so the cards have the right
- * amber number on first load.
+ * Target current-streak values per habit. The seeder backfills enough
+ * held logs to make `getStreakForHabit({ throughDate: yesterday })`
+ * return these numbers. Not a runtime denormalization — purely seed
+ * targets.
  */
-export const mockStreaksThroughYesterday: Readonly<Record<string, number>> = {
+export const targetStreaks: Readonly<Record<string, number>> = {
   'h-nicotine': 24,
   'h-walk': 11,
   'h-read': 3,
@@ -60,24 +57,39 @@ export function seedYesterdayJournal(now: Date = new Date()): JournalEntry {
   };
 }
 
-export const seedWorkoutTemplates: ReadonlyArray<WorkoutTemplate> = [
+/**
+ * Fixture-local extension of WorkoutTemplate. `rotationOrder` is a
+ * seed-only concern that maps to the workout_templates.rotation_order
+ * column. It does not bleed into the domain shape consumed by screens.
+ */
+type SeedWorkoutTemplate = WorkoutTemplate & { rotationOrder: number };
+
+export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
   {
     id: 'wt-push-a',
     name: 'Push A',
     exercises: ['Bench press', 'Incline DB press', 'Triceps pushdown'],
+    rotationOrder: 1,
   },
   {
     id: 'wt-pull-a',
     name: 'Pull A',
     exercises: ['Deadlift', 'Pull-up', 'Barbell row'],
+    rotationOrder: 2,
+  },
+  {
+    id: 'wt-legs-a',
+    name: 'Legs A',
+    exercises: ['Back squat', 'Romanian deadlift', 'Calf raise'],
+    rotationOrder: 3,
+  },
+  {
+    id: 'wt-push-b',
+    name: 'Push B',
+    exercises: ['Overhead press', 'Lateral raise', 'Dumbbell flye'],
+    rotationOrder: 4,
   },
 ];
-
-/**
- * The next routine in the rotation. Today shows this as the bottom card
- * with a text "Start" affordance (per the known-issue note — never filled).
- */
-export const seedNextWorkoutTemplateId = 'wt-push-a';
 
 /* --------------------------------- Seed sets ------------------------------- */
 
@@ -98,11 +110,9 @@ export type TodaySeed = {
   yesterdayLogs: ReadonlyArray<HabitLog>;
   yesterdayJournal: JournalEntry | null;
   todayJournal: JournalEntry | null;
-  mockStreaksThroughYesterday: Readonly<Record<string, number>>;
-  workoutTemplates: ReadonlyArray<WorkoutTemplate>;
-  nextWorkoutTemplateId: string | null;
+  targetStreaks: Readonly<Record<string, number>>;
+  workoutTemplates: ReadonlyArray<SeedWorkoutTemplate>;
   completedWorkoutDate: string | null;
-  referenceDate: string;
 };
 
 /**
@@ -111,8 +121,6 @@ export type TodaySeed = {
  * whenever the dev menu picks a different seed.
  */
 export function seedFor(name: SeedName, now: Date = new Date()): TodaySeed {
-  const referenceDate = todayIso(now);
-
   if (name === 'first-time') {
     return {
       habits: [],
@@ -120,26 +128,23 @@ export function seedFor(name: SeedName, now: Date = new Date()): TodaySeed {
       yesterdayLogs: [],
       yesterdayJournal: null,
       todayJournal: null,
-      mockStreaksThroughYesterday: {},
+      targetStreaks: {},
       workoutTemplates: [],
-      nextWorkoutTemplateId: null,
       completedWorkoutDate: null,
-      referenceDate,
     };
   }
 
   if (name === 'today-is-done') {
     // Same three habits as default, but every habit is held today, the
     // journal has an entry for today, and the next workout has been done.
-    // nextWorkoutTemplateId is cleared defensively so the "Next workout"
-    // card can't render alongside the takeover.
+    const today = todayIso(now);
     const todayLogs: ReadonlyArray<HabitLog> = seedHabits.map((h) => ({
       habitId: h.id,
-      date: referenceDate,
+      date: today,
       status: 'held',
     }));
     const todayJournal: JournalEntry = {
-      date: referenceDate,
+      date: today,
       mood: 4,
       tags: ['evening'],
       body: 'Quiet day. Held everything.',
@@ -150,26 +155,22 @@ export function seedFor(name: SeedName, now: Date = new Date()): TodaySeed {
       yesterdayLogs: seedYesterdayLogs(now),
       yesterdayJournal: seedYesterdayJournal(now),
       todayJournal,
-      mockStreaksThroughYesterday: mockStreaksThroughYesterday,
+      targetStreaks: targetStreaks,
       workoutTemplates: seedWorkoutTemplates,
-      nextWorkoutTemplateId: null,
-      completedWorkoutDate: referenceDate,
-      referenceDate,
+      completedWorkoutDate: today,
     };
   }
 
   // 'default' — current behavior. Habits exist, nothing logged today yet,
-  // yesterday's journal populated, Push A queued, no workout completed.
+  // yesterday's journal populated, no workout completed.
   return {
     habits: seedHabits,
     todayLogs: [],
     yesterdayLogs: seedYesterdayLogs(now),
     yesterdayJournal: seedYesterdayJournal(now),
     todayJournal: null,
-    mockStreaksThroughYesterday: mockStreaksThroughYesterday,
+    targetStreaks: targetStreaks,
     workoutTemplates: seedWorkoutTemplates,
-    nextWorkoutTemplateId: seedNextWorkoutTemplateId,
     completedWorkoutDate: null,
-    referenceDate,
   };
 }

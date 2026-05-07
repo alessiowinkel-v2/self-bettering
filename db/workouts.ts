@@ -1,42 +1,21 @@
-import type { Workout, WorkoutTemplate } from '../state/types';
+import type { WorkoutTemplate } from '../state/types';
 import { getDB } from './db';
 import { workoutId } from './ids';
 
 /**
  * Workout + template data access.
  *
- * Workouts store `started_at` and `completed_at` as ISO timestamps. The
- * domain `Workout.date` is derived from `completed_at` (YYYY-MM-DD).
+ * Workouts store `started_at` and `completed_at` as ISO timestamps.
  * In-progress workouts have `completed_at IS NULL` and are excluded from
  * "most recent completed" queries — matters for the Today screen which
  * only ever wants the last finished session.
  */
-
-type WorkoutRow = {
-  id: string;
-  template_id: string;
-  started_at: string;
-  completed_at: string | null;
-  duration_seconds: number | null;
-};
 
 type WorkoutTemplateRow = {
   id: string;
   name: string;
   exercises: string;
 };
-
-function rowToWorkout(row: WorkoutRow): Workout {
-  // completed_at is non-null because every caller filters on it. Take the
-  // date portion only — the time of day is not in the domain shape.
-  const completed = row.completed_at ?? row.started_at;
-  return {
-    id: row.id,
-    templateId: row.template_id,
-    date: completed.slice(0, 10),
-    durationMinutes: Math.round((row.duration_seconds ?? 0) / 60),
-  };
-}
 
 function rowToTemplate(row: WorkoutTemplateRow): WorkoutTemplate {
   let exercises: ReadonlyArray<string> = [];
@@ -61,19 +40,24 @@ export async function getWorkoutTemplates(): Promise<ReadonlyArray<WorkoutTempla
   return rows.map(rowToTemplate);
 }
 
-export async function getWorkoutTemplateById(
-  id: string
-): Promise<WorkoutTemplate | null> {
+/**
+ * Next routine in the rotation. Phase 3's Active Workout will replace
+ * this with real least-recently-completed semantics; this column is
+ * the Phase 2b stand-in.
+ */
+export async function getNextWorkoutTemplate(): Promise<WorkoutTemplate | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<WorkoutTemplateRow>(
     `SELECT id, name, exercises
        FROM workout_templates
-      WHERE id = ?;`,
-    [id]
+      ORDER BY rotation_order ASC, name ASC
+      LIMIT 1;`
   );
   return row ? rowToTemplate(row) : null;
 }
 
+// PHASE-3: rotation_order param needed when called from
+// non-test code paths.
 export async function insertWorkoutTemplate(
   template: WorkoutTemplate
 ): Promise<void> {
@@ -85,24 +69,20 @@ export async function insertWorkoutTemplate(
 }
 
 /**
- * Most recent completed workout for a given template. In-progress sessions
- * (completed_at IS NULL) are excluded — Today's "Next workout" card shows
- * the last finished session for that template's cycle.
+ * Date of the most recent completed workout across all templates, as
+ * YYYY-MM-DD. Used by the Today hydrate to set `completedWorkoutDate`
+ * when the latest completion happened today.
  */
-export async function getMostRecentCompletedWorkout(
-  templateId: string
-): Promise<Workout | null> {
+export async function getMostRecentCompletedWorkoutDate(): Promise<string | null> {
   const db = await getDB();
-  const row = await db.getFirstAsync<WorkoutRow>(
-    `SELECT id, template_id, started_at, completed_at, duration_seconds
+  const row = await db.getFirstAsync<{ completed_at: string }>(
+    `SELECT completed_at
        FROM workouts
-      WHERE template_id = ?
-        AND completed_at IS NOT NULL
+      WHERE completed_at IS NOT NULL
       ORDER BY completed_at DESC
-      LIMIT 1;`,
-    [templateId]
+      LIMIT 1;`
   );
-  return row ? rowToWorkout(row) : null;
+  return row ? row.completed_at.slice(0, 10) : null;
 }
 
 export async function startWorkout(input: {
@@ -133,31 +113,5 @@ export async function completeWorkout(input: {
             duration_seconds = ?
       WHERE id = ?;`,
     [completedAt, input.durationSeconds, input.id]
-  );
-}
-
-/**
- * Insert a fully-formed completed workout with a caller-supplied id.
- * Used by the dev seeder; production code should pair startWorkout +
- * completeWorkout instead.
- */
-export async function insertCompletedWorkout(input: {
-  id: string;
-  templateId: string;
-  startedAt: string;
-  completedAt: string;
-  durationSeconds: number;
-}): Promise<void> {
-  const db = await getDB();
-  await db.runAsync(
-    `INSERT INTO workouts (id, template_id, started_at, completed_at, duration_seconds)
-     VALUES (?, ?, ?, ?, ?);`,
-    [
-      input.id,
-      input.templateId,
-      input.startedAt,
-      input.completedAt,
-      input.durationSeconds,
-    ]
   );
 }

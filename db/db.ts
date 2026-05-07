@@ -9,11 +9,12 @@ import * as SQLite from 'expo-sqlite';
  * reload — by design, since SQLite handles are not safe to recreate on
  * the fly while statements are mid-flight.
  *
- * Sticky-rejection: if openDatabaseAsync ever rejects, dbPromise stays
- * holding the rejected promise for the rest of the process. Every
- * subsequent getDB() reuses it without retry. That's intentional — the
- * MigrationErrorScreen surfaces the failure to the user and there is no
- * recovery path short of a full app reload anyway.
+ * dbPromise is sticky on rejection. If openDatabaseAsync rejects (rare —
+ * usually disk/permissions issues), every subsequent getDB() reuses the
+ * rejected promise. The "Try again." affordance on BootErrorScreen will
+ * not recover this class of failure; force-quit and relaunch is the
+ * recovery path. Migration failures DO recover via retry because
+ * runMigrations re-enters the unapplied loop on each call.
  */
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;

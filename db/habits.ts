@@ -59,17 +59,3 @@ export async function createHabit(input: {
   );
   return { id, name: input.name, createdOn: input.createdOn };
 }
-
-/**
- * Insert a habit with a caller-chosen id. Used by the dev seeder so the
- * mock-data ids (h-nicotine, h-walk, h-read) survive into the DB and the
- * existing Today screen keeps rendering against them.
- */
-export async function insertHabitWithId(habit: Habit): Promise<void> {
-  const db = await getDB();
-  await db.runAsync(
-    `INSERT INTO habits (id, name, created_on, paused_at, deleted_at)
-     VALUES (?, ?, ?, NULL, NULL);`,
-    [habit.id, habit.name, habit.createdOn]
-  );
-}
