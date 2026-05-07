@@ -44,7 +44,7 @@ Order of work in Phase 1:
 
 Replace the mock layer with SQLite. Schema:
 
-- `habits` (id, name, description, created_at, paused_at, deleted_at)
+- `habits` (id, name, created_on, paused_at, deleted_at). `description` deferred until Habit Detail picks up notes; not in 0001. `created_on` is a date (YYYY-MM-DD), not a timestamp — habits are date-keyed for streak math.
 - `habit_logs` (id, habit_id, date, status: 'held' | 'slipped', logged_at)
 - `journal_entries` (id, date, mood, tags JSON, body, created_at, updated_at)
 - `workout_templates` (id, name, exercises JSON ordered)

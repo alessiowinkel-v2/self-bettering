@@ -6,8 +6,12 @@ import {
 import { Inter_400Regular, Inter_500Medium, useFonts as useInter } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import type { ComponentType } from 'react';
-import { ThemeProvider, useThemeMode, useThemeStore } from '../theme';
+import { useEffect, useState, type ComponentType } from 'react';
+import { View } from 'react-native';
+import { Screen } from '../components/primitives/Screen';
+import { Text } from '../components/primitives/Text';
+import { runMigrations } from '../db/migrate';
+import { ThemeProvider, useTheme, useThemeMode, useThemeStore } from '../theme';
 
 // Dev-only floating affordance for /design. Conditional require so Metro
 // dead-code-eliminates both the import and the module body in production —
@@ -26,11 +30,34 @@ export default function RootLayout() {
   const [inter] = useInter({ Inter_400Regular, Inter_500Medium });
   const hasHydrated = useThemeStore((s) => s._hasHydrated);
 
+  const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    runMigrations()
+      .then(() => {
+        if (!cancelled) setDbReady(true);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : String(e);
+        setDbError(message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!fraunces || !inter || !hasHydrated) return null;
 
   return (
     <ThemeProvider>
-      <RootStack />
+      {dbError ? (
+        <MigrationErrorScreen message={dbError} />
+      ) : dbReady ? (
+        <RootStack />
+      ) : null}
     </ThemeProvider>
   );
 }
@@ -44,6 +71,39 @@ function RootStack() {
         <Stack.Screen name="design" options={{ presentation: 'modal' }} />
       </Stack>
       {__DEV__ && DesignFloatingLink ? <DesignFloatingLink /> : null}
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+    </>
+  );
+}
+
+function MigrationErrorScreen({ message }: { message: string }) {
+  const mode = useThemeMode();
+  const { spacing } = useTheme();
+  return (
+    <>
+      <Screen scroll={false}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text variant="displayItalic" italic align="center">
+            Migration failed.
+          </Text>
+          <Text
+            variant="caption"
+            tone="secondary"
+            align="center"
+            style={{ marginTop: spacing[3] }}
+          >
+            {message}
+          </Text>
+          <Text
+            variant="caption"
+            tone="secondary"
+            align="center"
+            style={{ marginTop: spacing[3] }}
+          >
+            Force-quit and reopen.
+          </Text>
+        </View>
+      </Screen>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
     </>
   );
