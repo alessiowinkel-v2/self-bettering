@@ -48,7 +48,12 @@ export default function HabitsScreen() {
     }, []),
   );
 
-  const onOpenHabit = useCallback((_id: string) => {}, []);
+  const onOpenHabit = useCallback(
+    (id: string) => {
+      router.push(`/habit/${id}`);
+    },
+    [router]
+  );
 
   const onAddHabit = useCallback(() => {
     router.push('/add-habit');
@@ -66,8 +71,6 @@ export default function HabitsScreen() {
     void useHabitsListStore.getState().archive(id);
   }, []);
 
-  const onEdit = useCallback((_id: string) => {}, []);
-
   const renderActiveItem = ({
     item,
     drag,
@@ -84,7 +87,6 @@ export default function HabitsScreen() {
         todayStatus={todayStatus[item.id] ?? null}
         onPress={() => onOpenHabit(item.id)}
         onPause={() => onPause(item.id)}
-        onEdit={() => onEdit(item.id)}
         onArchive={() => onArchive(item.id)}
         drag={drag}
         isActive={isActive}

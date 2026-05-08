@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { Screen, SectionHeader } from '../../components/primitives';
 import {
@@ -46,6 +47,13 @@ import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
  */
 export default function TodayScreen() {
   const theme = useTheme();
+  const router = useRouter();
+  const onOpenHabit = useCallback(
+    (habitId: string) => {
+      router.push(`/habit/${habitId}`);
+    },
+    [router]
+  );
 
   // Shape decides the body layout. Two primitive selectors — a single
   // object-returning selector loops under Zustand's Object.is equality.
@@ -143,6 +151,7 @@ export default function TodayScreen() {
               status={row.status}
               onHeld={() => logHabit(row.habit.id, 'held')}
               onSlipped={() => logHabit(row.habit.id, 'slipped')}
+              onPress={() => onOpenHabit(row.habit.id)}
             />
           ))
         )}

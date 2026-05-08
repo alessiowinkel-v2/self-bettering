@@ -102,6 +102,31 @@ These came up across the design iterations. Logging them so they don't get lost.
 
 - **Streaks row clipping** the "Read 20m" chip on the right edge in several frames. The horizontal scroll is fine, but the gradient mask or fade-out on the trailing edge needs to be implemented so it reads as scrollable rather than clipped.
 
+## Open visual questions for on-device review
+
+These landed in code with a defensible default but want a phone-side eyeball pass before being treated as final.
+
+- **Heatmap90 rightmost-column anchor.** Currently: today sits at the row matching its weekday inside the rightmost column, with future days of the current week rendering as flat empty cells below. Alternative: anchor today to the bottom-right corner with no future-cells rendered (canonical GitHub-style). PDF page 11 is the tiebreaker.
+
+- **"Since {date}." typography.** Currently: Inter `body` `tone="secondary"` (16/22, muted, period-terminated). Alternative: Fraunces upright at ~16-18 (would require introducing a `displaySm` variant or repurposing `streakAccent` size). The line is factual metadata and reads cleanly as Inter, but Fraunces upright would lock the under-title slot to the heading typeface.
+
+- **Archived variant layout.** Currently: BEST and "Since" still render under an `ARCHIVED.` label. Alternative: hide both the way day-one does. PDF is silent on archived since Phase 3a introduced the concept — phone-test which reads better.
+
+- **Habit Detail title top-pad.** Currently: `useHeaderHeight() + spacing[3]`. May want spacing[2] or spacing[1] depending on how the title sits visually below the back chevron under the transparent header.
+
+- **Habit Detail action row weight.** Currently: full-secondary parity — Pause / Resume / Archive / Restore all render `tone="secondary"`. Defensible per the filled-button rule (Habit Detail has no singular primary affordance). Alternative: give Archive / Restore a touch of extra weight (e.g. `tone="primary"` for the archive verb, since it's destructive-deliberate). Phone-test whether the row reads as appropriately quiet or as too flat.
+
+- **Today-cell ring on Heatmap90 over a held tile.** Currently: 1px accent ring on top of accent-at-`heldCellOpacity` fill. May read as darker-amber-on-lighter-amber — the ring sits at full accent opacity on top of a fill whose opacity is often <1. Phone-test on the 24-day "No nicotine" run vs. a fresh held cell. Remediation options if too loud:
+  - ring at reduced opacity
+  - ring at `theme.colors.textPrimary` instead of `accent` (contrast against the fill, not the gap)
+  - inset ring with a 1-2px margin so it sits inside the cell against a sliver of background
+
+## Library assumptions worth re-verifying on dep upgrades
+
+Pinning third-party behavior. Worth checking when upgrading any of these.
+
+- **`react-native-draggable-flatlist` v4.0.3** is assumed not to mutate its `data` prop. The `as Habit[]` cast in [app/(tabs)/habits.tsx](../app/(tabs)/habits.tsx) (active habits passed as `ReadonlyArray<Habit>` cast to `Habit[]`) depends on this contract. Re-verify on major version bumps — if the library starts splicing in place, the store's reference would mutate silently. The current cast was verified against v4.0.3 source.
+
 ## Frames already on-device (in PDF) that match spec
 
 For reference when implementing — these are the canonical visual targets. PDF page numbers refer to the latest 32-page export.

@@ -63,7 +63,19 @@ export async function getArchivedHabits(): Promise<ReadonlyArray<Habit>> {
   return rows.map(rowToHabit);
 }
 
-export async function getHabitById(id: string): Promise<Habit | null> {
+/**
+ * Habit + its lifecycle flags in one query. The domain Habit type
+ * intentionally omits paused_at / deleted_at — those are
+ * screen-relevant only on Habit Detail and we don't want to widen the
+ * domain shape for every consumer. This entry-point returns both
+ * shapes from one round-trip so callers don't issue two SELECTs
+ * against the same row.
+ */
+export async function getHabitWithLifecycle(id: string): Promise<{
+  habit: Habit;
+  pausedAt: string | null;
+  deletedAt: string | null;
+} | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<HabitRow>(
     `SELECT id, name, created_on, paused_at, deleted_at
@@ -71,7 +83,12 @@ export async function getHabitById(id: string): Promise<Habit | null> {
       WHERE id = ?;`,
     [id]
   );
-  return row ? rowToHabit(row) : null;
+  if (!row) return null;
+  return {
+    habit: rowToHabit(row),
+    pausedAt: row.paused_at,
+    deletedAt: row.deleted_at,
+  };
 }
 
 // MAX(sort_order) scoped to active habits. When resume is added in
@@ -106,12 +123,61 @@ export async function pauseHabit(id: string): Promise<void> {
   );
 }
 
+/**
+ * Resume a paused habit. Clears paused_at AND recomputes sort_order to
+ * MAX(sort_order)+1 of currently active rows so the resumed habit lands
+ * at the bottom of the active list — matches the createHabit pattern
+ * called out in the comment above. Without the recompute, the resumed
+ * row would carry its pre-pause sort_order and could collide with an
+ * existing active row.
+ *
+ * Streak after resume is purely data-driven: getStreakForHabit walks
+ * backwards from throughDate and any gap between pause and resume zeros
+ * the run on next read. No frozen-streak state to thaw.
+ */
+export async function resumeHabit(id: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE habits
+        SET paused_at = NULL,
+            sort_order = COALESCE(
+              (SELECT MAX(sort_order) FROM habits
+                WHERE deleted_at IS NULL AND paused_at IS NULL),
+              0
+            ) + 1
+      WHERE id = ?;`,
+    [id]
+  );
+}
+
 /** Soft-archive a habit. The row stays for history but drops out of active. */
 export async function archiveHabit(id: string): Promise<void> {
   const db = await getDB();
   await db.runAsync(
     `UPDATE habits SET deleted_at = ? WHERE id = ?;`,
     [new Date().toISOString(), id]
+  );
+}
+
+/**
+ * Restore an archived habit to active. Clears deleted_at AND
+ * recomputes sort_order so the restored habit lands at the bottom of
+ * the active list — same reasoning as resumeHabit. Restore does NOT
+ * touch paused_at: a habit that was paused and then archived returns
+ * to "paused" on restore, not to "active".
+ */
+export async function restoreHabit(id: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE habits
+        SET deleted_at = NULL,
+            sort_order = COALESCE(
+              (SELECT MAX(sort_order) FROM habits
+                WHERE deleted_at IS NULL AND paused_at IS NULL),
+              0
+            ) + 1
+      WHERE id = ?;`,
+    [id]
   );
 }
 

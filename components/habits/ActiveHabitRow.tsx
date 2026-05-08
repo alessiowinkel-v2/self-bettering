@@ -23,7 +23,6 @@ type ActiveHabitRowProps = {
   todayStatus: HabitStatus | null;
   onPress: () => void;
   onPause: () => void;
-  onEdit: () => void;
   onArchive: () => void;
   /** From DraggableFlatList — call to start drag on long-press. */
   drag: () => void;
@@ -45,7 +44,6 @@ export function ActiveHabitRow({
   todayStatus,
   onPress,
   onPause,
-  onEdit,
   onArchive,
   drag,
   isActive,
@@ -60,6 +58,12 @@ export function ActiveHabitRow({
     fn();
   };
 
+  // Pause and Archive both render quiet (secondary). Pause is a
+  // daily-rare action and Archive is destructive-but-deliberate;
+  // amber is reserved for the singular primary action of a screen
+  // (filled-button rule's principle). Detail's action row uses the
+  // same two-secondary lockup so the verbs read identically across
+  // surfaces.
   const renderRightActions = () => (
     <View
       style={{
@@ -71,19 +75,13 @@ export function ActiveHabitRow({
     >
       <TextButton
         label="Pause"
-        tone="accent"
+        tone="secondary"
         onPress={closeAndRun(onPause)}
         accessibilityLabel={`Pause ${habit.name}`}
       />
       <TextButton
-        label="Edit"
-        tone="secondary"
-        onPress={closeAndRun(onEdit)}
-        accessibilityLabel={`Edit ${habit.name}`}
-      />
-      <TextButton
         label="Archive"
-        tone="destructive"
+        tone="secondary"
         onPress={closeAndRun(onArchive)}
         accessibilityLabel={`Archive ${habit.name}`}
       />

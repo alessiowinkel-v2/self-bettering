@@ -11,6 +11,13 @@ type HabitCardProps = {
   status: HabitStatus | null;
   onHeld: () => void;
   onSlipped: () => void;
+  /**
+   * Optional surface tap. Routes to Habit Detail on Today. The inner
+   * Held/Slipped TextButtons are Pressables themselves and become the
+   * gesture responder when tapped, so the card-level onPress fires only
+   * for the outer surface — no double-fire.
+   */
+  onPress?: () => void;
 };
 
 /**
@@ -23,7 +30,14 @@ type HabitCardProps = {
  *     so the rhythm of three card-shaped slots holds steady mid-tap. Right
  *     side is "HELD" or "SLIPPED" in small-caps amber/muted.
  */
-export function HabitCard({ name, streak, status, onHeld, onSlipped }: HabitCardProps) {
+export function HabitCard({
+  name,
+  streak,
+  status,
+  onHeld,
+  onSlipped,
+  onPress,
+}: HabitCardProps) {
   const theme = useTheme();
   const collapsed = status !== null;
 
@@ -31,8 +45,8 @@ export function HabitCard({ name, streak, status, onHeld, onSlipped }: HabitCard
   // steady. The horizontal padding stays put.
   const padding = collapsed ? theme.spacing[3] : theme.spacing[4];
 
-  return (
-    <Card padding={padding}>
+  const body = (
+    <>
       <View
         style={{
           flexDirection: 'row',
@@ -75,6 +89,20 @@ export function HabitCard({ name, streak, status, onHeld, onSlipped }: HabitCard
           />
         </View>
       )}
-    </Card>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Card
+        padding={padding}
+        onPress={onPress}
+        accessibilityLabel={`Open ${name}`}
+      >
+        {body}
+      </Card>
+    );
+  }
+
+  return <Card padding={padding}>{body}</Card>;
 }

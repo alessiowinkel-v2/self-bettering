@@ -20,11 +20,11 @@ export function DesignFloatingLink() {
 
   return (
     <View
-      pointerEvents="box-none"
       style={{
         position: 'absolute',
         top: insets.top + theme.spacing[2],
         right: theme.spacing[5],
+        pointerEvents: 'box-none',
       }}
     >
       <Link href="/design" asChild>

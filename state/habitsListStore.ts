@@ -5,6 +5,8 @@ import {
   createHabit as dbCreateHabit,
   pauseHabit as dbPauseHabit,
   reorderHabits as dbReorderHabits,
+  restoreHabit as dbRestoreHabit,
+  resumeHabit as dbResumeHabit,
   getActiveHabits,
   getArchivedHabits,
   getPausedHabits,
@@ -49,7 +51,9 @@ type HabitsListState = {
 
   hydrate: () => Promise<void>;
   pause: (id: string) => Promise<void>;
+  resume: (id: string) => Promise<void>;
   archive: (id: string) => Promise<void>;
+  restore: (id: string) => Promise<void>;
   create: (name: string) => Promise<void>;
   reorder: (orderedIds: ReadonlyArray<string>) => Promise<void>;
 };
@@ -108,10 +112,28 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
     await useTodayStore.getState().hydrate();
   },
 
+  // dual-hydrate: resume reactivates the row + recomputes sort_order at
+  // the data layer. Both stores re-read so the row reappears in active
+  // (Habits List) and shows up among Today's habit cards.
+  resume: async (id) => {
+    await dbResumeHabit(id);
+    await useHabitsListStore.getState().hydrate();
+    await useTodayStore.getState().hydrate();
+  },
+
   // dual-hydrate: each mutation refreshes both stores
   // (habits-list and today). Single-writer assumption holds.
   archive: async (id) => {
     await dbArchiveHabit(id);
+    await useHabitsListStore.getState().hydrate();
+    await useTodayStore.getState().hydrate();
+  },
+
+  // dual-hydrate: restore clears deleted_at + recomputes sort_order at
+  // the data layer (mirroring resume). The habit returns to the bottom
+  // of the active list. Today re-reads so the chip + card return too.
+  restore: async (id) => {
+    await dbRestoreHabit(id);
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
   },

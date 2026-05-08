@@ -52,13 +52,13 @@ export function StreaksRow({ items }: StreaksRowProps) {
         colors={[transparent, opaque]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        pointerEvents="none"
         style={{
           position: 'absolute',
           right: 0,
           top: 0,
           bottom: 0,
           width: fadeWidth,
+          pointerEvents: 'none',
         }}
       />
     </View>

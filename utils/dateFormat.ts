@@ -1,4 +1,4 @@
-import { format, parseISO, subDays } from 'date-fns';
+import { addDays, format, parseISO, subDays } from 'date-fns';
 
 /**
  * Date helpers for screens. Centralized so the format strings are auditable
@@ -34,4 +34,14 @@ export function formatTodayHeaderDate(now: Date = new Date()): string {
  */
 export function formatWeekdayWithDate(iso: string): string {
   return format(parseISO(iso), 'EEEE, MMMM d');
+}
+
+/**
+ * Shift a YYYY-MM-DD date by N days (positive or negative). Returns
+ * YYYY-MM-DD. The intermediate Date constructor uses local time, which
+ * is what every YYYY-MM-DD date in this app represents — keeps DST and
+ * timezone semantics aligned with the rest of the date helpers.
+ */
+export function shiftIsoDate(iso: string, deltaDays: number): string {
+  return toIsoDate(addDays(parseISO(iso), deltaDays));
 }

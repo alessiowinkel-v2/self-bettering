@@ -1,4 +1,5 @@
 import type { HabitLog, HabitStatus } from '../state/types';
+import { shiftIsoDate } from '../utils/dateFormat';
 import { getDB } from './db';
 import { habitLogId } from './ids';
 
@@ -30,6 +31,93 @@ export async function getLogsForDate(date: string): Promise<ReadonlyArray<HabitL
     [date]
   );
   return rows.map(rowToLog);
+}
+
+/**
+ * Logs for a habit in [startDate, endDate] inclusive, ordered ASC. The
+ * range is bounded — there is intentionally no unbounded variant to avoid
+ * pulling a habit's entire history into memory by accident. Heatmap90
+ * and the THIS WEEK row both have a fixed window, so the bound fits.
+ */
+export async function getLogsForHabitInRange(input: {
+  habitId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<ReadonlyArray<HabitLog>> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<HabitLogRow>(
+    `SELECT habit_id, date, status
+       FROM habit_logs
+      WHERE habit_id = ?
+        AND date >= ?
+        AND date <= ?
+      ORDER BY date ASC;`,
+    [input.habitId, input.startDate, input.endDate]
+  );
+  return rows.map(rowToLog);
+}
+
+/**
+ * Most recent slip date for a habit on or before throughDate, or null
+ * if the habit has never slipped. Used by the "Since {date}." line on
+ * Habit Detail to anchor the date to the start of the current run
+ * (day after the last slip), falling back to createdOn when never
+ * slipped.
+ */
+export async function getMostRecentSlipDate(input: {
+  habitId: string;
+  throughDate: string;
+}): Promise<string | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<{ date: string }>(
+    `SELECT date
+       FROM habit_logs
+      WHERE habit_id = ?
+        AND status = 'slipped'
+        AND date <= ?
+      ORDER BY date DESC
+      LIMIT 1;`,
+    [input.habitId, input.throughDate]
+  );
+  return row?.date ?? null;
+}
+
+/**
+ * Longest held streak ever for a habit, on or before throughDate. Walks
+ * the held logs in date order and tracks the longest run of
+ * day-over-day held days. Single SQL fetch + O(n) JS reduce. At habit
+ * scale (one row/day, max a few thousand) this is trivially cheap.
+ *
+ * Definition of "consecutive": held logs whose dates are exactly one
+ * day apart. A slip OR a missing day breaks the run.
+ */
+export async function getBestStreak(input: {
+  habitId: string;
+  throughDate: string;
+}): Promise<number> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{ date: string }>(
+    `SELECT date
+       FROM habit_logs
+      WHERE habit_id = ?
+        AND status = 'held'
+        AND date <= ?
+      ORDER BY date ASC;`,
+    [input.habitId, input.throughDate]
+  );
+  let best = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const r of rows) {
+    if (prev !== null && nextIsoDate(prev) === r.date) {
+      run += 1;
+    } else {
+      run = 1;
+    }
+    if (run > best) best = run;
+    prev = r.date;
+  }
+  return best;
 }
 
 /**
@@ -80,24 +168,36 @@ export async function getStreakForHabit(input: {
   const habitRow = await db.getFirstAsync<{
     created_on: string;
     paused_at: string | null;
+    deleted_at: string | null;
   }>(
-    `SELECT created_on, paused_at FROM habits WHERE id = ?;`,
+    `SELECT created_on, paused_at, deleted_at FROM habits WHERE id = ?;`,
     [input.habitId]
   );
   if (!habitRow) return 0;
   const createdOn = habitRow.created_on;
 
-  // If the habit is paused, freeze the walk at the pause date. Slicing
-  // the ISO timestamp's date portion is safe because paused_at is always
-  // written via toISOString() and the local-time pause day is what we
-  // want to anchor to (matching how throughDate is also a local-time
-  // YYYY-MM-DD).
+  // If the habit is paused or archived, freeze the walk at that date.
+  // Slicing the ISO timestamp's date portion is safe because paused_at
+  // and deleted_at are always written via toISOString() and the local
+  // calendar day is what we want to anchor to (matching how throughDate
+  // is also a local-time YYYY-MM-DD). Pause and archive both intend
+  // "freeze the streak as-of this day"; days after are off the books
+  // and must not be treated as gaps that would zero the streak.
   const pausedDate = habitRow.paused_at
     ? habitRow.paused_at.slice(0, 10)
     : null;
+  const deletedDate = habitRow.deleted_at
+    ? habitRow.deleted_at.slice(0, 10)
+    : null;
+  const freezeDate =
+    pausedDate !== null && deletedDate !== null
+      ? pausedDate < deletedDate
+        ? pausedDate
+        : deletedDate
+      : (pausedDate ?? deletedDate);
   const effectiveThroughDate =
-    pausedDate !== null && pausedDate < input.throughDate
-      ? pausedDate
+    freezeDate !== null && freezeDate < input.throughDate
+      ? freezeDate
       : input.throughDate;
 
   const rows = await db.getAllAsync<{ date: string; status: HabitStatus }>(
@@ -130,15 +230,14 @@ export async function getStreakForHabit(input: {
 }
 
 /**
- * ISO-only date math (no Date object). Avoids timezone pitfalls — the
- * input is "YYYY-MM-DD" in local time and the output is the day before.
+ * ISO-only date math thin-wrappers around the shared shiftIsoDate
+ * helper. Kept as named one-liners so the streak walks and the
+ * forward-pass best-streak loop read at the call site.
  */
 function previousIsoDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map((s) => parseInt(s, 10));
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() - 1);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
+  return shiftIsoDate(iso, -1);
+}
+
+function nextIsoDate(iso: string): string {
+  return shiftIsoDate(iso, 1);
 }
