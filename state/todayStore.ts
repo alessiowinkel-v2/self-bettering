@@ -70,6 +70,15 @@ type TodayStoreState = {
 
   logHabit: (habitId: string, status: HabitStatus) => Promise<void>;
   hydrate: () => Promise<void>;
+  /**
+   * Targeted refresh of the two journal slices only — todayJournal and
+   * yesterdayJournal. Called after a journal upsert (save-time, fast path)
+   * and on Today's focus effect (safety net for the unmount-flush path
+   * inside the journal editor's debounced save). Does NOT re-read habits,
+   * logs, streaks, workouts, or templates — those are stable across
+   * journal edits.
+   */
+  refreshJournalSlice: () => Promise<void>;
 };
 
 export const useTodayStore = create<TodayStoreState>((set) => ({
@@ -153,6 +162,46 @@ export const useTodayStore = create<TodayStoreState>((set) => ({
       streaksThroughYesterday,
       referenceDate: today,
     });
+  },
+
+  refreshJournalSlice: async () => {
+    // Silent on failure (stale slice values are acceptable for a
+    // non-critical refresh — boot's hydrate uses BootErrorScreen for
+    // the same failure shape, but a focus-effect refresh shouldn't
+    // tear down the screen). Warn-log so the failure surfaces during
+    // dev rather than vanishing into the void.
+    //
+    // Boot-retry edge: this action reads `today` and `yesterday` from
+    // the system clock at call time, not from store.referenceDate.
+    // If a date rollover happens between boot's hydrate and the
+    // first focus refresh (sub-second window), the two journal
+    // fields could end up keyed against different dates than the
+    // rest of the store's snapshot. Accepted: at single-user scale
+    // and second-boundary granularity, the ordering's wrong only
+    // for the user who happens to refocus Today across midnight on
+    // a fresh boot. Day-rollover is a Phase 4 concern globally.
+    try {
+      const now = new Date();
+      const today = todayIso(now);
+      const yesterday = yesterdayIso(now);
+      const [todayJournal, yesterdayJournal] = await Promise.all([
+        getJournalEntryForDate(today),
+        getJournalEntryForDate(yesterday),
+      ]);
+      // Note for Phase 3d (Journal List): getJournalEntryForDate
+      // builds a fresh JournalEntry object on every call, so this
+      // set() writes new references even when the row content is
+      // unchanged. Today subscribes to `yesterdayJournal` directly
+      // and re-renders on every focus refresh as a result. Not a
+      // loop (focus events don't fire in tight succession), but a
+      // missed-equality optimization. If Journal List subscribes to
+      // the same slice and re-renders are expensive, pass an
+      // equality-checked selector or content-compare before set().
+      set({ todayJournal, yesterdayJournal });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[todayStore] refreshJournalSlice failed:', e);
+    }
   },
 }));
 

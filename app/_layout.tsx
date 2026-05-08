@@ -93,6 +93,8 @@ function RootStack() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add-habit" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="habit/[id]" />
+        <Stack.Screen name="journal/[date]" />
         {__DEV__ ? (
           <Stack.Screen name="design" options={{ presentation: 'modal' }} />
         ) : null}

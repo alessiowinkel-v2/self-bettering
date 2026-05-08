@@ -41,6 +41,7 @@ export type TypeRole =
   | 'heading'
   | 'body'
   | 'bodyMedium'
+  | 'bodyItalicFraunces'
   | 'label'
   | 'caption'
   | 'streakAccent';
@@ -76,6 +77,11 @@ export const type: TypeStyles = {
   },
   bodyMedium: {
     fontFamily: 'Inter_500Medium',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  bodyItalicFraunces: {
+    fontFamily: 'Fraunces_400Regular_Italic',
     fontSize: 16,
     lineHeight: 22,
   },

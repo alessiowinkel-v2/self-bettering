@@ -33,7 +33,7 @@ Tracks what's been designed in Claude Design, what's pending, and known issues t
 - One-line entry ("Tired.") — proves the editor stays spacious with sparse input
 - Light · mid-entry
 
-**Status:** ✅ Done. Strongest set of frames in the design pass.
+**Status:** ✅ Done. Strongest set of frames in the design pass. Built in code in Phase 3c at [app/journal/[date].tsx](../app/journal/[date].tsx). Reachable as `/journal/[date]` from Today (`NoJournalYetCard.onWrite` → today's date, `YesterdayCard.onPress` → entry's date). Auto-save is debounced at 500ms via [utils/useDebouncedSave.ts](../utils/useDebouncedSave.ts); the SAVED indicator dot dims to a hollow ring while pending or errored, fills once persisted state matches the draft. The hook gates with `enabled: hydrated` so opening an existing entry rebases the persisted-baseline to the loaded values — no spurious save fires on hydrate. Tap a chip to delete; "+ tag" expands inline with case-insensitive dedupe (preserving first-typed casing). Body's prompts are sibling Text nodes, not the input's placeholder, so they hide once `body.length > 0`. Today's `useFocusEffect` calls `useTodayStore.refreshJournalSlice()` on focus as a safety net for the editor's unmount-flush path; save-time refresh is the fast path. New theme variant `bodyItalicFraunces` (Fraunces italic, 16/22) introduced for the prompt lines so they sit at body size, not heading size.
 
 ### Active Workout
 **States covered:**
@@ -115,6 +115,24 @@ These landed in code with a defensible default but want a phone-side eyeball pas
 - **Habit Detail title top-pad.** Currently: `useHeaderHeight() + spacing[3]`. May want spacing[2] or spacing[1] depending on how the title sits visually below the back chevron under the transparent header.
 
 - **Habit Detail action row weight.** Currently: full-secondary parity — Pause / Resume / Archive / Restore all render `tone="secondary"`. Defensible per the filled-button rule (Habit Detail has no singular primary affordance). Alternative: give Archive / Restore a touch of extra weight (e.g. `tone="primary"` for the archive verb, since it's destructive-deliberate). Phone-test whether the row reads as appropriately quiet or as too flat.
+
+- **Journal Editor SAVED indicator position.** Currently: absolutely positioned inside the `Screen`'s `ScrollView` contentContainer at `top: useHeaderHeight() + spacing[3]`, `right: theme.spacing[5]`. Because the contentContainer already paints its own horizontal gutter, this lands the indicator one full gutter inside the date title's right edge rather than flush with it. Phone-test whether that inset reads as "comfortable corner placement" or "drifting away from the title's edge." If too inset, drop to `right: 0`.
+
+- **Journal Editor scroll vs. KeyboardAvoidingView.** Currently: `Screen scroll={true}` (default), no KeyboardAvoidingView. iOS scrolls a focused multiline TextInput into view automatically. If the keyboard covers the body or word count on the phone, switch to `scroll={false}` + `KeyboardAvoidingView behavior="padding"`, mirroring the add-habit modal.
+
+- **Journal Editor mood dot diameter.** Currently: 12px (vs. 8px on the read-only `MoodDots` used by the Yesterday card). The interactive version doubles as a touch target via `hitSlop: 16`; the visible dot is intentionally larger so it reads as a control rather than an indicator. Phone-test whether 12px sits comfortably with the Inter caption tag chips on the same row, or whether 10–11 reads better.
+
+- **Journal Editor mood-row + tag-row wrapping.** Currently: dots and chips render in a single flex row with `flexWrap: 'wrap'`, gap `spacing[4]`. With four or more tags ("evening · gym · morning · walk") the chip set wraps to a second line *below* the dots, breaking the design's single-row inline reading. Phone-test on a typical real-world tag count. Remediation if it reads wrong: split into two rows (dots above, chips below), or scrollable horizontal chip rail.
+
+- **Journal Editor tag-chip baseline alignment with mood dots.** Currently: `alignItems: 'center'` on the row centers 12px circles against the chip's box midline. PDF page 7 ("Mood set — terracotta dot") aligns dots with the chip-text baseline, not the chip-box midline. Phone-test whether the centered alignment reads off-balance.
+
+- **Journal Editor word-count placement.** Currently: flowed below the body TextInput with `marginTop: spacing[5]` so it scrolls with content. Design-system.md:86 says "small caps gray bottom-left only when content exists" which reads as viewport-anchored corner placement. Phone-test on PDF pages 8-10. If corner-anchored is the canonical design, the editor needs `scroll={false}` + `KeyboardAvoidingView` + a footer slot, which is mutually exclusive with the current `scroll={true}` layout. Resolve along with the scroll-vs-KAV question above.
+
+- **Journal Editor error-caption overlap on long-weekday dates.** Currently: SavedIndicator is absolute-positioned at `top: useHeaderHeight() + spacing[3]`, `right: spacing[5]` (see indicator-position note above). The "Could not save." caption renders directly under the SAVED row inside the same absolute wrapper. On dates whose Fraunces-display title wraps to a second line ("Wednesday, September 25"), the caption can collide with the title's descender. Phone-test on a long weekday/month combination.
+
+- **Journal Editor prompts hard-hide vs. fade.** Currently: `JournalPrompts` is rendered iff `body.length === 0`, no animation. Design-system.md:85 says "These disappear as the user types" — ambiguous between instant and animated. Phone-test whether a 120-200ms cross-fade reads more graceful than the current hard-cut.
+
+- **Journal Editor date title format (`MMMM d` vs `MMM d`).** Currently: `formatWeekdayWithDate(iso)` returns `EEEE, MMMM d` ("Wednesday, May 6", full month name). The Today header uses `MMM d` (abbreviated). The journal-and-Yesterday-card pair share the same util, so they stay consistent — but PDF page 8 shows the journal title's date and is the tiebreaker on whether full-month or abbreviated reads correct at the editor's display size.
 
 - **Today-cell ring on Heatmap90 over a held tile.** Currently: 1px accent ring on top of accent-at-`heldCellOpacity` fill. May read as darker-amber-on-lighter-amber — the ring sits at full accent opacity on top of a fill whose opacity is often <1. Phone-test on the 24-day "No nicotine" run vs. a fresh held cell. Remediation options if too loud:
   - ring at reduced opacity

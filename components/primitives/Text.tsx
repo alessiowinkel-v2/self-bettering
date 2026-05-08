@@ -38,6 +38,7 @@ const FRAUNCES_VARIANTS: ReadonlyArray<TypeRole> = [
   'displayItalic',
   'heading',
   'streakAccent',
+  'bodyItalicFraunces',
 ];
 
 function isFrauncesVariant(variant: TypeRole): boolean {

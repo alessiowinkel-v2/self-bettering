@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { Screen, SectionHeader } from '../../components/primitives';
@@ -21,6 +21,7 @@ import {
   useTodayStore,
 } from '../../state/todayStore';
 import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
+import { todayIso } from '../../utils/dateFormat';
 
 /**
  * Today screen. Canonical vertical order from the design PDF:
@@ -48,6 +49,32 @@ import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
 export default function TodayScreen() {
   const theme = useTheme();
   const router = useRouter();
+
+  // Refresh today's and yesterday's journal slices on focus so the
+  // Yesterday card and No-journal-yet card pick up edits made in the
+  // editor — including the unmount-flush path where save resolves
+  // after the editor screen has popped. Targeted: this action does
+  // NOT re-read habits, logs, streaks, or workouts.
+  //
+  // The first focus after boot re-reads the same two journal rows
+  // hydrate() already loaded into the store. Two redundant SQLite
+  // reads on first paint of Today is the price of keeping this
+  // unconditional — gating on a "dirty since last focus" flag would
+  // entangle the editor and the store. Cheap at single-user scale.
+  //
+  // Race: if the user navigates back from the editor before the
+  // editor's debounced save lands, the focus effect fires
+  // immediately and reads stale rows; the editor's unmount-flush
+  // then writes the actual data, but no second focus event fires
+  // until the next interaction. Today's Yesterday/NoJournalYet card
+  // can briefly show the pre-edit state. Any subsequent focus or
+  // navigation triggers the next read. Accepted for simplicity.
+  useFocusEffect(
+    useCallback(() => {
+      void useTodayStore.getState().refreshJournalSlice();
+    }, []),
+  );
+
   const onOpenHabit = useCallback(
     (habitId: string) => {
       router.push(`/habit/${habitId}`);
@@ -163,10 +190,13 @@ export default function TodayScreen() {
       {yesterdayJournal !== null ? (
         <>
           <SectionHeader>Yesterday</SectionHeader>
-          <YesterdayCard entry={yesterdayJournal} onPress={() => {}} />
+          <YesterdayCard
+            entry={yesterdayJournal}
+            onPress={() => router.push(`/journal/${yesterdayJournal.date}`)}
+          />
         </>
       ) : !hasJournalToday ? (
-        <NoJournalYetCard onWrite={() => {}} />
+        <NoJournalYetCard onWrite={() => router.push(`/journal/${todayIso()}`)} />
       ) : null}
 
       {nextWorkout ? (

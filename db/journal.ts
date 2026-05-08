@@ -46,6 +46,26 @@ export async function getJournalEntryForDate(date: string): Promise<JournalEntry
   return row ? rowToEntry(row) : null;
 }
 
+/**
+ * Idempotent delete by date. Used by the journal editor when the user
+ * clears all fields — body, mood, tags — on an existing entry. The
+ * editor prefers a clean disk over a stale row that the future
+ * Journal List would render as a blank preview. Succeeds whether or
+ * not a row exists for the date (no upstream existence check needed).
+ */
+export async function deleteJournalEntry(date: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `DELETE FROM journal_entries WHERE date = ?;`,
+    [date]
+  );
+}
+
+/**
+ * created_at is a write-time audit field. If a past date is edited,
+ * this reflects when the row was inserted, not when the date occurred.
+ * Journal List should sort by date (content), not created_at (audit).
+ */
 export async function upsertJournalEntry(entry: JournalEntry): Promise<void> {
   const db = await getDB();
   const id = journalEntryId(entry.date);
