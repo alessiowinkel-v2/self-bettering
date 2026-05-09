@@ -2,12 +2,17 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { Screen, Text, TextButton } from '../../components/primitives';
+import {
+  Screen,
+  Text,
+  TextButton,
+  WeekDots,
+  type WeekDot,
+} from '../../components/primitives';
 import {
   BestLockup,
   Heatmap90,
   StatusLabel,
-  WeekDots,
 } from '../../components/habit';
 import {
   getBestStreak,
@@ -24,7 +29,6 @@ import {
   heatmapWindow,
   sinceDate,
   type HabitLifecycleVariant,
-  type WeekDot,
 } from '../../utils/habitDetail';
 import { todayIso } from '../../utils/dateFormat';
 import type { Habit, HabitLog, HabitStatus } from '../../state/types';

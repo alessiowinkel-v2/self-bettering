@@ -1,6 +1,9 @@
 import { addDays, format, parseISO, startOfWeek } from 'date-fns';
+import type { WeekDot } from '../components/primitives';
 import type { HabitLog, HabitStatus } from '../state/types';
 import { shiftIsoDate, toIsoDate } from './dateFormat';
+
+export type { WeekDot } from '../components/primitives';
 
 /**
  * Pure helpers for the Habit Detail screen. Date math, the
@@ -132,20 +135,6 @@ export function buildHeatmapCells(input: {
   return cells;
 }
 
-export type WeekDot = {
-  /** ISO date the dot represents. */
-  date: string;
-  /** "M" | "T" | "W" | "T" | "F" | "S" | "S" — letter under the dot. */
-  letter: string;
-  /**
-   * 'held' | 'slipped' | 'empty' — empty covers both not-yet-logged
-   * past days and future days within the current week.
-   */
-  status: 'held' | 'slipped' | 'empty';
-  /** True when this dot represents today (gets a ring overlay). */
-  isToday: boolean;
-};
-
 const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
 /**
@@ -153,6 +142,11 @@ const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
  * (European convention; matches the design PDF). The caller passes
  * the full window's logs — buildWeekDots filters via Map lookup so
  * older logs are silently ignored, no extra DB round-trip required.
+ *
+ * Status mapping into the primitive's domain-agnostic vocabulary:
+ *   'held'    → 'filled'   (solid amber)
+ *   'slipped' → 'outlined' (hollow disc)
+ *   no log    → 'empty'    (flat tile)
  */
 export function buildWeekDots(input: {
   today: string;
@@ -169,7 +163,7 @@ export function buildWeekDots(input: {
     const date = toIsoDate(addDays(weekStart, i));
     const logged = byDate.get(date);
     const status: WeekDot['status'] =
-      logged === 'held' ? 'held' : logged === 'slipped' ? 'slipped' : 'empty';
+      logged === 'held' ? 'filled' : logged === 'slipped' ? 'outlined' : 'empty';
     dots.push({
       date,
       letter: WEEKDAY_LETTERS[i],

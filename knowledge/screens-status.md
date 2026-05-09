@@ -64,6 +64,8 @@ Tracks what's been designed in Claude Design, what's pending, and known issues t
 
 **Status:** ✅ Done. Next-workout card is right-sized, "Start ›" with chevron as text link (correct, not filled). Routines render as rows not cards. The amber dot on the next-up routine inside the routines list is exactly the subtle hierarchy specified. "+ Add routine" reads as a quiet text link.
 
+Built in code in Phase 3d at [app/(tabs)/gym.tsx](../app/(tabs)/gym.tsx). Hydrates via [state/gymHomeStore.ts](../state/gymHomeStore.ts) on focus. Two new SQLite queries in [db/workouts.ts](../db/workouts.ts): `getWorkoutTemplatesWithLastCompleted` (correlated MAX per template, LEFT-JOIN-equivalent semantics, preserves rotation_order) and `getCompletedWorkoutDatesInRange` (DISTINCT date strings via `substr(completed_at, 1, 10)`). No migration. Date math + the "Last · {phrase} · N exercises" caption live in [utils/gymHome.ts](../utils/gymHome.ts) (`getWeekRange`, `buildGymWeekDots`, `formatRelativeDate`). The week strip reuses the new shared primitive [components/primitives/WeekDots.tsx](../components/primitives/WeekDots.tsx) — promoted out of `components/habit/` and the status union renamed `'held' | 'slipped' | 'empty'` → `'filled' | 'outlined' | 'empty'` so the vocabulary is domain-agnostic. `buildWeekDots` in [utils/habitDetail.ts](../utils/habitDetail.ts) maps `'held' → 'filled'`, `'slipped' → 'outlined'`, no-log → `'empty'`. Habit Detail renders identically — pure naming change. Gym Home's `buildGymWeekDots` only emits `'filled'` and `'empty'` (workouts have no slipped concept). The `NextWorkoutCard` is screen-local under `components/gym/`, deliberately not unified with Today's; both surfaces wire to the same Active Workout route in Phase 3e+. Routine row tap, "+ Add routine", "Start", and "Add one." all `console.log` for now.
+
 ## Pending — design and build in Claude Code
 
 These three screens were originally going to be designed in Claude Design first, then implemented. Switching strategy: **design and build them directly in Claude Code**, using the established design system tokens and the patterns from Today / Gym Home / Habit Detail as reference. They're all list patterns or settings — lower stakes than what's already designed, and Claude Code can produce them faithfully without canvas iteration.
@@ -139,7 +141,19 @@ These landed in code with a defensible default but want a phone-side eyeball pas
   - ring at `theme.colors.textPrimary` instead of `accent` (contrast against the fill, not the gap)
   - inset ring with a 1-2px margin so it sits inside the cell against a sliver of background
 
-## Library assumptions worth re-verifying on dep upgrades
+- **Gym Home next-up dot diameter.** Currently: 6px solid amber circle inside a 14px-wide gutter on every `RoutineRow`. PDF page 25 shows the dot at roughly the same scale, but on-device a 6px pixel-snapped circle on 3x density may read smaller than intended. Phone-test against the gutter; remediation is bumping to 7-8px, since the gutter has the headroom.
+
+- **Gym Home "Start ›" chevron glyph weight.** Currently: literal `›` (U+203A, single right-pointing angle quotation) inline in the `TextButton` label, rendering at Inter Medium 16. Inter ships the chevron at a slightly-thicker weight than the system pseudo-chevron in iOS lists. Phone-test whether the inline glyph reads as "tap me" or as decorative punctuation; remediation is replacing with a Lucide `ChevronRight` icon at the same baseline.
+
+- **Gym Home "Add one." button weight on first-time empty.** Currently: muted `TextButton` (accent tone). HabitsEmpty uses the same treatment, and the project's settled reading of the filled-button rule reserves `FilledButton` for Today's canonical first-time CTA only. Phone-test whether the muted "Add one." reads as discoverable enough on the empty Gym Home, or if the screen needs a touch more weight than HabitsEmpty since Gym Home has nothing else competing for attention.
+
+- **Gym Home next-workout card subtitle wrapping.** Currently: `previewLine` is `template.exercises.slice(0, 3).join(', ')` and renders with `numberOfLines={1}` so a long preview ellipsizes mid-word. PDF page 25 shows the line ending cleanly within the card width; phone-test on a routine with three long exercise names ("Incline DB press, Triceps pushdown, Lateral raise") — if it ellipsizes too aggressively, drop to a 2-exercise preview or switch to a shorter exercise vocabulary in the seed.
+
+- **WeekDots rename regression check.** Currently: the primitive at [components/primitives/WeekDots.tsx](../components/primitives/WeekDots.tsx) renders identically to the previous Habit-Detail-only version — the rename was status-union-only, no style changes. Phone-test Habit Detail's THIS WEEK row before and after — visual parity is the bar.
+
+- **Gym Home "X of N done this week" denominator semantics.** Currently: `N` is `templates.length` (total routine count). A user with four routines who has done three sessions reads as "3 of 4 done this week." Alternative: `N` could be a planned-per-week target (e.g. 4 sessions/week even if 6 routines exist), but that requires a per-routine cadence field that doesn't exist yet. Phone-test whether "of N total routines" reads naturally; if not, the denominator may need to drop entirely ("3 sessions this week.").
+
+- **Gym Home week strip caption-vs-dot-row spacing.** Currently: dots row, then `marginTop: spacing[3]` to the "X of N done" caption when present. PDF page 25 shows the caption sitting one row of breathing room below the dots; phone-test whether `spacing[3]` (12) reads as that row, or if `spacing[4]` (16) is closer to the design's gap.
 
 Pinning third-party behavior. Worth checking when upgrading any of these.
 
