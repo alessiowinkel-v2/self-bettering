@@ -1,11 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
-import {
-  GymEmpty,
-  NextWorkoutCard,
-  RoutineRow,
-} from '../../components/gym';
+import { GymEmpty, RoutineRow } from '../../components/gym';
 import {
   Screen,
   SectionHeader,
@@ -13,6 +9,7 @@ import {
   TextButton,
   WeekDots,
 } from '../../components/primitives';
+import { NextWorkoutCard } from '../../components/workout';
 import { useGymHomeStore } from '../../state/gymHomeStore';
 import { useTheme } from '../../theme';
 import { buildGymWeekDots, formatRelativeDate } from '../../utils/gymHome';
@@ -43,6 +40,9 @@ export default function GymScreen() {
   const completedDatesThisWeek = useGymHomeStore(
     (s) => s.completedDatesThisWeek,
   );
+  const routinesCompletedThisWeek = useGymHomeStore(
+    (s) => s.routinesCompletedThisWeek,
+  );
   const referenceDate = useGymHomeStore((s) => s.referenceDate);
   const isHydrated = useGymHomeStore((s) => s.isHydrated);
 
@@ -72,11 +72,11 @@ export default function GymScreen() {
     [referenceDate, completedDatesThisWeek],
   );
 
-  // "3 of 4 done this week" — denominator is total routine count, so a
-  // four-routine week with three completions reads as on-pace. Hidden
-  // when no completions yet (matches the design's "nothing logged this
-  // week" frame).
-  const weekDoneCount = completedDatesThisWeek.length;
+  // "2 of 4 done this week" — numerator is distinct routines completed
+  // this week (one routine done Mon and Fri still reads as 1), not
+  // distinct days. Denominator is total routine count, so the caption
+  // tracks "how much of the rotation has been touched." Hidden when
+  // zero (matches the design's "nothing logged this week" frame).
 
   const Title = (
     <View style={{ marginTop: theme.spacing[3], marginBottom: theme.spacing[5] }}>
@@ -112,17 +112,25 @@ export default function GymScreen() {
         </>
       ) : null}
 
-      <SectionHeader>This week</SectionHeader>
-      <WeekDots dots={weekDots} />
-      {weekDoneCount > 0 ? (
+      <View style={{ marginTop: theme.spacing[7] }}>
         <Text
-          variant="caption"
+          variant="label"
           tone="secondary"
-          style={{ marginTop: theme.spacing[3] }}
+          style={{ marginBottom: theme.spacing[3] }}
         >
-          {weekDoneCount} of {templates.length} done this week.
+          THIS WEEK
         </Text>
-      ) : null}
+        <WeekDots dots={weekDots} />
+        {routinesCompletedThisWeek > 0 ? (
+          <Text
+            variant="caption"
+            tone="secondary"
+            style={{ marginTop: theme.spacing[3] }}
+          >
+            {routinesCompletedThisWeek} of {templates.length} done this week.
+          </Text>
+        ) : null}
+      </View>
 
       <SectionHeader>Routines</SectionHeader>
       <View>
@@ -133,7 +141,7 @@ export default function GymScreen() {
           });
           const exerciseCount = row.template.exercises.length;
           const exerciseLabel = exerciseCount === 1 ? 'exercise' : 'exercises';
-          const subtitle = `Last · ${lastPhrase} · ${exerciseCount} ${exerciseLabel}`;
+          const subtitle = `Last · ${lastPhrase} · ${exerciseCount} ${exerciseLabel}.`;
           return (
             <RoutineRow
               key={row.template.id}

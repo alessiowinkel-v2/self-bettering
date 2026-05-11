@@ -71,12 +71,15 @@ type ListRowPressableProps = ListRowBaseProps & {
 export type ListRowProps = ListRowStaticProps | ListRowPressableProps;
 
 /**
- * ListRow is the canonical row used in Habits List, Journal List, Gym Home,
- * and Settings. Renders a left/right lockup with vertical breathing room
- * and a hairline divider unless this is the last row in its ListGroup.
+ * Used by surfaces that need a simple title + trailing slot + divider
+ * rhythm. Surfaces with custom row interactions (swipe, drag,
+ * leading-content gutters) implement their own row pattern: see
+ * ActiveHabitRow and RoutineRow.
  *
- * If the row sits outside a ListGroup, no divider is rendered — wrap rows
- * in ListGroup whenever you want the row-with-divider rhythm.
+ * Renders a left/right lockup with vertical breathing room and a
+ * hairline divider unless this is the last row in its ListGroup. If
+ * the row sits outside a ListGroup, no divider is rendered — wrap
+ * rows in ListGroup whenever you want the row-with-divider rhythm.
  */
 export function ListRow(props: ListRowProps) {
   const theme = useTheme();

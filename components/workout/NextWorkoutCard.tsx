@@ -11,15 +11,12 @@ type NextWorkoutCardProps = {
 };
 
 /**
- * Gym Home's "Up next" card. Routine name on top, exercise preview
- * line below, "Start" affordance on the right. Text-only Start —
- * daily/repeat actions never get filled amber per the design system.
- *
- * Kept screen-local rather than shared with Today's NextWorkoutCard:
- * the two surfaces position the card differently (Today: under the
- * Yesterday slot; Gym: as the screen's lead block) and may diverge
- * further in later phases. Sharing now would lock in convergence
- * that hasn't been validated.
+ * "Up next" card — used on Today (under Yesterday) and Gym Home (as
+ * the screen's lead block). Routine name on top, exercise preview line
+ * below, "Start ›" affordance on the right. Text-only Start, never
+ * filled — daily/repeat actions never get filled amber per the design
+ * system rule. The chevron carries the navigation signal into the
+ * Active Workout flow.
  */
 export function NextWorkoutCard({ name, previewLine, onStart }: NextWorkoutCardProps) {
   const theme = useTheme();

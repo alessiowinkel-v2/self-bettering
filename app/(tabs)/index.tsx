@@ -6,7 +6,6 @@ import {
   AllHeldCard,
   EmptyToday,
   HabitCard,
-  NextWorkoutCard,
   NoJournalYetCard,
   StreaksRow,
   TodayHeader,
@@ -14,6 +13,7 @@ import {
   YesterdayCard,
   type StreaksRowItem,
 } from '../../components/today';
+import { NextWorkoutCard } from '../../components/workout';
 import { useTheme } from '../../theme';
 import {
   selectHasJournalToday,

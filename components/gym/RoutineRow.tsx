@@ -5,9 +5,9 @@ import { Text } from '../primitives';
 type RoutineRowProps = {
   name: string;
   /**
-   * Subtitle line, e.g. "Last · today · 5 exercises" or
-   * "Last · never · 5 exercises". Composed by the screen so the row
-   * stays formatting-agnostic.
+   * Subtitle line, e.g. "Last · today · 5 exercises." or
+   * "Last · never · 5 exercises." — composed by the screen so the
+   * row stays formatting-agnostic.
    */
   subtitle: string;
   /** When true, the leading amber dot renders; otherwise the gutter is reserved blank. */

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import {
   getCompletedWorkoutDatesInRange,
-  getNextWorkoutTemplate,
   getWorkoutTemplatesWithLastCompleted,
   type WorkoutTemplateWithLast,
 } from '../db/workouts';
@@ -28,6 +27,13 @@ type GymHomeState = {
   nextTemplateId: string | null;
   /** ISO dates within the current Mon–Sun week that had a workout. */
   completedDatesThisWeek: ReadonlyArray<string>;
+  /**
+   * Count of distinct routines whose most recent completion falls within
+   * the current Mon–Sun week. Drives the "X of N done this week." caption.
+   * A routine done Mon and Fri still counts as one — the metric tracks
+   * rotation coverage, not session frequency.
+   */
+  routinesCompletedThisWeek: number;
   /** Reference date the store was hydrated against. */
   referenceDate: string;
   isHydrated: boolean;
@@ -39,6 +45,7 @@ export const useGymHomeStore = create<GymHomeState>((set) => ({
   templates: [],
   nextTemplateId: null,
   completedDatesThisWeek: [],
+  routinesCompletedThisWeek: 0,
   referenceDate: todayIso(),
   isHydrated: false,
 
@@ -48,16 +55,29 @@ export const useGymHomeStore = create<GymHomeState>((set) => ({
     const today = todayIso();
     const { start, end } = getWeekRange(today);
 
-    const [templates, nextTemplate, completedDatesThisWeek] = await Promise.all([
+    // Next-up is provably the first row of getWorkoutTemplatesWithLastCompleted:
+    // both queries sort by rotation_order ASC, name ASC. Reading once
+    // saves a redundant SQLite round-trip.
+    const [templates, completedDatesThisWeek] = await Promise.all([
       getWorkoutTemplatesWithLastCompleted(),
-      getNextWorkoutTemplate(),
       getCompletedWorkoutDatesInRange({ startDate: start, endDate: end }),
     ]);
 
+    const routinesCompletedThisWeek = templates.reduce(
+      (count, row) =>
+        row.lastCompletedDate !== null &&
+        row.lastCompletedDate >= start &&
+        row.lastCompletedDate <= end
+          ? count + 1
+          : count,
+      0,
+    );
+
     set({
       templates,
-      nextTemplateId: nextTemplate?.id ?? null,
+      nextTemplateId: templates[0]?.template.id ?? null,
       completedDatesThisWeek,
+      routinesCompletedThisWeek,
       referenceDate: today,
       isHydrated: true,
     });

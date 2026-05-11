@@ -55,13 +55,16 @@ export function buildGymWeekDots(input: {
  * Short relative-date phrase for routine rows.
  *   today       → "today"
  *   yesterday   → "yesterday"
- *   2-6 days    → "{n} days ago"
- *   >6 days     → "{n} days ago" (cap not applied at this scale)
+ *   2+ days     → "{n} days ago"
  *   null input  → "never"
  *
  * Returns the bare phrase without leading "Last ·" or trailing
  * period — the row composes the full sentence so the formatter stays
- * focused on relative-date wording alone.
+ * focused on relative-date wording alone. All-lowercase: the
+ * "Last ·" prefix establishes a structural frame, and values inside
+ * the frame stay lowercase so the column reads consistently regardless
+ * of which phrase fills the slot ("{n} days ago" can't reasonably
+ * capitalize).
  */
 export function formatRelativeDate(input: {
   fromDate: string | null;

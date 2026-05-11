@@ -1,0 +1,1 @@
+export { NextWorkoutCard } from './NextWorkoutCard';

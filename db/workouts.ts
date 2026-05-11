@@ -4,8 +4,10 @@ import { workoutId } from './ids';
 
 /**
  * A routine plus the date it was most recently completed (or null if
- * never completed). Drives the Gym Home routine list — Last · today.,
- * Last · 3 days ago., never done.
+ * never completed). Powers the Gym Home routine list, rendered as
+ * "Last · today · 5 exercises.", "Last · 3 days ago · 5 exercises.",
+ * or "Last · never · 5 exercises." — relative-date phrase stays
+ * lowercase inside the structural "Last ·" frame.
  */
 export type WorkoutTemplateWithLast = {
   template: WorkoutTemplate;
@@ -66,8 +68,6 @@ export async function getNextWorkoutTemplate(): Promise<WorkoutTemplate | null> 
   return row ? rowToTemplate(row) : null;
 }
 
-// PHASE-3: rotation_order param needed when called from
-// non-test code paths.
 export async function insertWorkoutTemplate(
   template: WorkoutTemplate
 ): Promise<void> {
@@ -128,15 +128,16 @@ export async function completeWorkout(input: {
 
 /**
  * Returns every routine paired with the date it was most recently
- * completed. LEFT JOIN preserves never-completed templates as
- * `lastCompletedDate: null`. Correlated MAX (per-template) is the
- * cleanest single-pass shape — versus a GROUP BY subquery, this lets
- * the outer query keep the natural template ordering and avoids
- * shuffling join keys around.
+ * completed. Correlated MAX (per-template) preserves never-completed
+ * templates as `lastCompletedDate: null` — LEFT-JOIN-equivalent
+ * semantics. Versus a GROUP BY subquery, this lets the outer query
+ * keep the natural template ordering and avoids shuffling join keys
+ * around.
  *
- * Ordering: rotation_order ASC, name ASC. Same key as
- * getNextWorkoutTemplate so the "Up next" highlight on Gym Home and
- * the routine list stay in sync.
+ * Ordering: rotation_order ASC, name ASC. Same ORDER BY key as
+ * getNextWorkoutTemplate, so Today's next-up (which still calls
+ * getNextWorkoutTemplate) and Gym Home's next-up (which derives from
+ * templates[0]) agree by construction.
  */
 export async function getWorkoutTemplatesWithLastCompleted(): Promise<
   ReadonlyArray<WorkoutTemplateWithLast>
@@ -167,9 +168,10 @@ export async function getWorkoutTemplatesWithLastCompleted(): Promise<
  * within [startDate, endDate], inclusive. Drives the Gym Home week
  * strip — one filled dot per day with at least one completion.
  *
- * Both bounds are calendar dates, but `completed_at` is an ISO
- * timestamp. We compare against `startDate` and `endDate || 'T23:59:59.999'`
- * so a same-day completion at any time falls within the range.
+ * Both bounds are calendar dates. We slice the YYYY-MM-DD prefix off
+ * `completed_at` via substr(..., 1, 10) and compare lexicographically;
+ * BETWEEN on the date prefix handles inclusive bounds correctly without
+ * any time-suffix gymnastics.
  */
 export async function getCompletedWorkoutDatesInRange(input: {
   startDate: string;
