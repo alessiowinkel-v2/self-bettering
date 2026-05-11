@@ -7,12 +7,13 @@ import {
   EmptyToday,
   HabitCard,
   NoJournalYetCard,
+  SettingsCog,
   StreaksRow,
   TodayHeader,
   TodayIsDone,
-  YesterdayCard,
   type StreaksRowItem,
 } from '../../components/today';
+import { JournalPreviewCard } from '../../components/journal';
 import { NextWorkoutCard } from '../../components/workout';
 import { useTheme } from '../../theme';
 import {
@@ -30,7 +31,7 @@ import { todayIso } from '../../utils/dateFormat';
  *        'empty'         → "Add your first habit to begin." + filled CTA
  *        'today-is-done' → "Today is done." takeover + Streaks
  *        'default'       → Habit cards (or AllHeld) + Streaks +
- *                          Yesterday slot (YesterdayCard | NoJournalYetCard) +
+ *                          Yesterday slot (JournalPreviewCard | NoJournalYetCard) +
  *                          Next workout (when queued)
  *
  * Architecture note: derived values (habitsWithStatus, allHeld, nextWorkout)
@@ -141,9 +142,27 @@ export default function TodayScreen() {
     [habitsWithStatus],
   );
 
+  // Cog routes to /settings. Absolute-positioned inside the Screen's
+  // contentContainer so it tracks the top gutter under the safe-area
+  // inset without redefining the screen's padding. Rendered alongside
+  // each shape's body so the title row stays untouched.
+  const cogElement = (
+    <View
+      style={{
+        position: 'absolute',
+        top: theme.spacing[3],
+        right: 0,
+        zIndex: 1,
+      }}
+    >
+      <SettingsCog onPress={() => router.push('/settings')} />
+    </View>
+  );
+
   if (shapeKind === 'empty') {
     return (
       <Screen>
+        {cogElement}
         <TodayHeader />
         <EmptyToday onAddHabit={() => {}} />
       </Screen>
@@ -153,6 +172,7 @@ export default function TodayScreen() {
   if (shapeKind === 'today-is-done') {
     return (
       <Screen>
+        {cogElement}
         <TodayHeader />
         <TodayIsDone />
         <SectionHeader>Streaks</SectionHeader>
@@ -164,6 +184,7 @@ export default function TodayScreen() {
   // 'default'
   return (
     <Screen>
+      {cogElement}
       <TodayHeader />
 
       <View style={{ marginTop: theme.spacing[5], gap: theme.spacing[3] }}>
@@ -190,7 +211,7 @@ export default function TodayScreen() {
       {yesterdayJournal !== null ? (
         <>
           <SectionHeader>Yesterday</SectionHeader>
-          <YesterdayCard
+          <JournalPreviewCard
             entry={yesterdayJournal}
             onPress={() => router.push(`/journal/${yesterdayJournal.date}`)}
           />

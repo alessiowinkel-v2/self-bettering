@@ -8,7 +8,7 @@ import {
 import { useTheme } from '../../theme';
 import type { TypeRole } from '../../theme/tokens';
 
-type Tone = 'primary' | 'secondary' | 'tertiary' | 'accent';
+type Tone = 'primary' | 'secondary' | 'tertiary' | 'accent' | 'destructive';
 
 type TextProps = Omit<RNTextProps, 'style'> & {
   children?: ReactNode;
@@ -63,11 +63,13 @@ export function Text({
   const color =
     tone === 'accent'
       ? theme.colors.accent
-      : tone === 'secondary'
-        ? theme.colors.textSecondary
-        : tone === 'tertiary'
-          ? theme.colors.textTertiary
-          : theme.colors.textPrimary;
+      : tone === 'destructive'
+        ? theme.colors.destructive
+        : tone === 'secondary'
+          ? theme.colors.textSecondary
+          : tone === 'tertiary'
+            ? theme.colors.textTertiary
+            : theme.colors.textPrimary;
 
   const base: TextStyle = { ...theme.type[variant], color };
 

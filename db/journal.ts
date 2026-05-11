@@ -35,6 +35,26 @@ function rowToEntry(row: JournalRow): JournalEntry {
   };
 }
 
+/**
+ * Every journal entry on disk, newest-first by date. Drives Journal
+ * List, which groups by month client-side. Ordering by date (the
+ * content's day) rather than created_at (audit field) is deliberate —
+ * editing a past entry should not jump it to the top of the list.
+ *
+ * No pagination at single-user scale. If the list ever pushes past
+ * a few thousand entries (unrealistic for one writer), revisit with
+ * LIMIT + OFFSET driven by a month-cursor.
+ */
+export async function getAllJournalEntries(): Promise<ReadonlyArray<JournalEntry>> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<JournalRow>(
+    `SELECT id, date, mood, tags, body
+       FROM journal_entries
+      ORDER BY date DESC;`
+  );
+  return rows.map(rowToEntry);
+}
+
 export async function getJournalEntryForDate(date: string): Promise<JournalEntry | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<JournalRow>(

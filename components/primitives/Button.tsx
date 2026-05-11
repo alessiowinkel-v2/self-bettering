@@ -14,8 +14,10 @@ type TextButtonProps = {
   onPress: () => void;
   /**
    * Color tone for the label. Defaults to 'accent' (amber).
-   * 'destructive' currently renders as primary text — phase 3 will add a
-   * dedicated destructive token.
+   * 'destructive' resolves to theme.colors.destructive (phase 3e wired
+   * the token). Reserve destructive for actions that negate data ("Clear
+   * all data.", "Turn off.") — not for daily/repeat actions, those stay
+   * accent or secondary.
    */
   tone?: TextButtonTone;
   /**
@@ -41,11 +43,9 @@ export function TextButton({
 }: TextButtonProps) {
   const theme = useTheme();
 
-  // TODO: phase 3 — add theme.colors.destructive and route the destructive
-  // tone to it. Falling back to textPrimary keeps the placeholder readable.
   const textTone =
     tone === 'destructive'
-      ? 'primary'
+      ? 'destructive'
       : tone === 'accent'
         ? 'accent'
         : tone === 'secondary'

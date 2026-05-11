@@ -5,12 +5,14 @@ type NoJournalYetCardProps = {
 };
 
 /**
- * Stand-in for the Yesterday card when today's journal hasn't been written
- * yet. Same outer dimensions as YesterdayCard so the screen rhythm holds.
+ * Stand-in for the Yesterday card when today's journal hasn't been
+ * written yet. Same outer dimensions as JournalPreviewCard so the
+ * screen rhythm holds.
  *
- * The whole card is the tap target — same pattern as YesterdayCard. The
- * parent suppresses the "Yesterday" section header above this card; the
- * header belongs to the yesterday-card slot only, not to this empty state.
+ * The whole card is the tap target — same pattern as the preview
+ * card. The parent suppresses the "Yesterday" section header above
+ * this card; the header belongs to the yesterday slot only, not to
+ * this empty state.
  */
 export function NoJournalYetCard({ onWrite }: NoJournalYetCardProps) {
   return (

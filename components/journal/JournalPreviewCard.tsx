@@ -5,18 +5,25 @@ import type { JournalEntry } from '../../state/types';
 import { formatWeekdayWithDate } from '../../utils/dateFormat';
 import { MoodDots } from './MoodDots';
 
-type YesterdayCardProps = {
+type JournalPreviewCardProps = {
   entry: JournalEntry;
   onPress: () => void;
 };
 
 /**
- * The Yesterday peek card on Today. Shows the prior day's journal entry
- * as a tappable preview — weekday + mood-dot rating bar on top, first
- * line or two of body, tag chips at the bottom. Tapping opens the
- * Journal editor for that date (Phase 1d wires the route).
+ * Read-only preview of a journal entry. The whole card is the tap target.
+ *
+ * Used in two places:
+ *   1. The Yesterday slot on Today (entry = yesterday's journal).
+ *   2. Each row on Journal List (entry = the listed day's journal).
+ *
+ * Layout: weekday + mood-dot rating bar on top, first one or two lines
+ * of body, tag chips at the bottom. Mirrors the YesterdayCard pattern
+ * the design system already validated — Phase 3e promoted it here so
+ * Journal List could share the exact same surface without duplicating
+ * the lockup.
  */
-export function YesterdayCard({ entry, onPress }: YesterdayCardProps) {
+export function JournalPreviewCard({ entry, onPress }: JournalPreviewCardProps) {
   const theme = useTheme();
   const weekday = formatWeekdayWithDate(entry.date);
 

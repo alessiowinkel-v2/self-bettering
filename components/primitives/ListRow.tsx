@@ -51,8 +51,22 @@ type ListRowBaseProps = {
    */
   right?: ReactNode;
   /**
-   * Optional content rendered below the left/right row — e.g. the
-   * Held/Slipped twin buttons on a habit card.
+   * Optional content rendered below the row's left/right lockup but
+   * BEFORE the trailing divider — so the divider still sits below the
+   * entire expanded row group. Useful for in-row expansions like an
+   * inline time picker, or a paired action when a row is in an
+   * "expanded" state. Renders with marginTop: spacing[2] so the
+   * expansion has a touch of breathing room without redefining the row.
+   *
+   * @example
+   * <ListRow
+   *   index={i}
+   *   left={<Text>Morning check-in</Text>}
+   *   right={<Text tone="secondary">07:30</Text>}
+   *   onPress={() => setExpanded(!expanded)}
+   *   accessibilityLabel="Morning check-in time"
+   *   below={expanded ? <DateTimePicker mode="time" {...} /> : undefined}
+   * />
    */
   below?: ReactNode;
   style?: StyleProp<ViewStyle>;

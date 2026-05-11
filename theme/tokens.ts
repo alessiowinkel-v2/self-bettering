@@ -8,6 +8,7 @@ export type ColorRole =
   | 'textSecondary'
   | 'textTertiary'
   | 'accent'
+  | 'destructive'
   | 'divider';
 
 export type ColorPalette = Record<ColorRole, string>;
@@ -20,6 +21,12 @@ export const colorsDark: ColorPalette = {
   textSecondary: '#8C857A',
   textTertiary: '#5A554E',
   accent: '#E8A24C',
+  // Single destructive accent. Reserved for "Clear all data." and
+  // "Turn off." style negations — chromatic enough to read as a
+  // distinct signal, muted enough to sit next to the amber accent
+  // without competing. Phone-test the hex on glass per the open
+  // visual questions list before treating as final.
+  destructive: '#B5482E',
   divider: '#26242A',
 };
 
@@ -31,6 +38,7 @@ export const colorsLight: ColorPalette = {
   textSecondary: '#6E665A',
   textTertiary: '#9C9486',
   accent: '#C9802A',
+  destructive: '#9E3B1F',
   divider: '#E2DCD0',
 };
 
