@@ -20,8 +20,9 @@
  *      semantically equivalent.
  *   4. Drop sets_old.
  *   5. Recreate the idx_sets_workout_id index that 0001_init defined —
- *      it does not survive the rename and the read path in
- *      getSetsForWorkout depends on it.
+ *      it does not survive the rename and the workout_id-keyed reads
+ *      (including the correlated subquery in
+ *      getLastSetsForExerciseBeforeWorkout) depend on it.
  *
  * Forward-only. The migration runner has no rollback path, so the down
  * SQL is preserved here as a comment for future-reader intent — not as

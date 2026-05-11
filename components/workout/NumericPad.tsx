@@ -39,6 +39,12 @@ type NumericPadProps = {
  * number) so leading zeros, lone decimals, and partial entries
  * survive intermediate keystrokes. We parse to a number only when
  * Log fires.
+ *
+ * `initialValue` is read on mount only. Changing the prop after
+ * mount does NOT reset the buffer. Callers that need to repopulate
+ * (e.g. switching between kg and reps mode, advancing to the next
+ * set) must remount the pad via a `key` prop derived from whatever
+ * uniquely identifies the editing context.
  */
 export function NumericPad({
   initialValue,

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import {
   getLastSetsForExerciseBeforeWorkout,
-  getSetsForWorkout,
   logSet,
   type SetRow,
 } from '../db/sets';
@@ -277,15 +276,6 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
 }));
 
 /* --------------------------------- Selectors ------------------------------- */
-
-/**
- * Verifies the workout is complete by side-effect of the `status`
- * field. Kept as a named selector so screens read intent rather than
- * the raw string.
- */
-export function selectIsWorkoutComplete(s: ActiveWorkoutState): boolean {
-  return s.status === 'done';
-}
 
 /**
  * True iff the next-to-log set is the FINAL set of the FINAL exercise.

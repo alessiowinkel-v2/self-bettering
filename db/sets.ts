@@ -101,25 +101,6 @@ export async function logSet(input: {
 }
 
 /**
- * All sets logged inside a workout, ordered by exercise name then set
- * number. Used by Active Workout on hydrate to rebuild the per-exercise
- * progress slices in one read.
- */
-export async function getSetsForWorkout(
-  workoutId: string
-): Promise<ReadonlyArray<SetRow>> {
-  const db = await getDB();
-  const rows = await db.getAllAsync<SetDBRow>(
-    `SELECT id, workout_id, exercise_name, set_number, kg, reps, logged_at
-       FROM sets
-      WHERE workout_id = ?
-      ORDER BY exercise_name ASC, set_number ASC;`,
-    [workoutId]
-  );
-  return rows.map(dbRowToSet);
-}
-
-/**
  * Sets from the most recent COMPLETED workout (other than the current
  * one) that contained this exercise. Empty array if there's no prior
  * record — Active Workout uses that to hide the "LAST" line and skip

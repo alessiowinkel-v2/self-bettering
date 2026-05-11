@@ -50,6 +50,25 @@ import { formatElapsed } from '../utils/workout';
  * Log commits the draft (falling back to placeholder values from
  * `lastSets`) into the DB via logCurrentSet. Drafts reset whenever the
  * active set advances.
+ *
+ * Deferred to Phase 4 (intentional gaps, not bugs):
+ *   - Tick re-render scope. ElapsedDisplay and RestBanner could be
+ *     extracted as children to localize the 1Hz re-render. Wait until
+ *     rest-timer behavior gets more elaborate or DevTools shows it
+ *     costing frames on real-device profiling.
+ *   - In-flight guards on startNewWorkout and logCurrentSet. Take
+ *     when the swap-exercise modal (Phase 4) adds a second writer to
+ *     the store. The UI-level isLogging gate in SetRow + the DB-level
+ *     UNIQUE constraint already prevent the row-Log double-tap race;
+ *     adding store-level guards is only needed once concurrent writers
+ *     exist.
+ *   - SetRow.handleLog silent error swallow. Wire to the toast/Alert
+ *     system when that's built. The UNIQUE-collision case is no-op
+ *     by design — silent is correct there; the gap is everything else.
+ *   - Resume-in-progress UI on Gym Home. Orphan workouts (abandoned
+ *     or force-quit) sit on disk for 24h until cleanupOrphanWorkouts
+ *     GCs them; Phase 4 will surface them as "Pick up where you left
+ *     off." rows so the kept sets are reachable before the GC fires.
  */
 export default function WorkoutScreen() {
   const theme = useTheme();
@@ -57,7 +76,6 @@ export default function WorkoutScreen() {
   const params = useLocalSearchParams<{ templateId?: string }>();
 
   const status = useActiveWorkoutStore((s) => s.status);
-  const workoutId = useActiveWorkoutStore((s) => s.workoutId);
   const templateId = useActiveWorkoutStore((s) => s.templateId);
   const templateName = useActiveWorkoutStore((s) => s.templateName);
   const startedAt = useActiveWorkoutStore((s) => s.startedAt);
@@ -83,13 +101,15 @@ export default function WorkoutScreen() {
   //      navigated away), clear it. Without this the bootstrap gate
   //      below sees status === 'done' and skips startNewWorkout.
   //   2. Decide whether to bootstrap a fresh workout. Reads from
-  //      getState() so the gate sees the post-reset slot, not the
+  //      getState() so the gate sees the post-reset slot, not a
   //      stale closure value.
   //
-  // Single-writer store; Fast Refresh during dev is the only way this
-  // effect re-fires mid-workout (params.templateId is stable across
-  // a session). The status check prevents Fast Refresh from arming a
-  // second workout on top of an active one.
+  // Deps: only `params.templateId` is reactive — the other reads
+  // (`router`, `resetToIdle`, `startNewWorkout`) hold stable refs
+  // (expo-router memoizes the router; zustand action refs are
+  // created once at store init). They're listed so exhaustive-deps
+  // stays honest without a disable; the effect still only re-fires
+  // when the templateId param changes (Fast Refresh aside).
   useEffect(() => {
     const tid = params.templateId;
     if (typeof tid !== 'string' || tid.length === 0) {
@@ -108,8 +128,7 @@ export default function WorkoutScreen() {
         router.back();
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.templateId]);
+  }, [params.templateId, router, resetToIdle, startNewWorkout]);
 
   // Tick driver for elapsed + rest. One interval per workout, cleared
   // on unmount. The dependency on `startedAt` re-arms cleanly if a
@@ -151,10 +170,18 @@ export default function WorkoutScreen() {
   const currentSetNumber = currentExercise
     ? currentExercise.loggedSets.length + 1
     : 0;
+  // Primitive-keyed deps so invalidation is explicit:
+  //   - `exercises` reference changes after every logCurrentSet (the
+  //     store dispatches a new array) — keys the most common case.
+  //   - `currentExerciseIndex` advances when an exercise completes.
+  //   - `currentSetNumber` advances on every log within an exercise.
+  // The body reads `currentExercise` from closure, which is just
+  // `exercises[currentExerciseIndex]` — re-evaluated each render.
   const placeholderForCurrentSet = useMemo(() => {
-    if (!currentExercise || currentSetNumber <= 0) return null;
-    return currentExercise.lastSets[currentSetNumber - 1] ?? null;
-  }, [currentExercise, currentSetNumber]);
+    const ex = exercises[currentExerciseIndex];
+    if (!ex) return null;
+    return ex.lastSets[currentSetNumber - 1] ?? null;
+  }, [exercises, currentExerciseIndex, currentSetNumber]);
 
   const [draftKg, setDraftKg] = useState<number | null>(null);
   const [draftReps, setDraftReps] = useState<number | null>(null);
