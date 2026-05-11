@@ -7,6 +7,15 @@ import type {
 } from '../state/types';
 
 /**
+ * A single set value seeded into a "prior" completed workout for a
+ * template. Drives the Active Workout "LAST 82.5kg × 6, 6, 5, 4" line
+ * and the numeric pad's "last · 82.5" pill on first run-through in
+ * dev. Stored per-exercise so each prescription can carry its own
+ * load-and-rep shape.
+ */
+export type SeedPriorSet = { kg: number; reps: number };
+
+/**
  * Seed fixtures for dev mode. Inputs to db/seedDev, which wipes the
  * domain tables and re-inserts these rows. The shapes match the
  * domain types in state/types.ts.
@@ -61,33 +70,134 @@ export function seedYesterdayJournal(now: Date = new Date()): JournalEntry {
  * Fixture-local extension of WorkoutTemplate. `rotationOrder` is a
  * seed-only concern that maps to the workout_templates.rotation_order
  * column. It does not bleed into the domain shape consumed by screens.
+ *
+ * `priorSets` holds a synthetic prior-workout's sets per exercise, keyed
+ * by exercise name. seedDev writes them into a completed workout dated
+ * a few days back so the Active Workout screen's "LAST 82.5kg × 6, 6, 5, 4"
+ * line populates from day one. Without this, every exercise in dev
+ * mode would render as a first-ever session until the user logs a
+ * real workout — the screen's most-loaded state would only be
+ * reachable after running through the full flow once.
  */
-type SeedWorkoutTemplate = WorkoutTemplate & { rotationOrder: number };
+type SeedWorkoutTemplate = WorkoutTemplate & {
+  rotationOrder: number;
+  priorSets: Readonly<Record<string, ReadonlyArray<SeedPriorSet>>>;
+};
 
 export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
   {
     id: 'wt-push-a',
     name: 'Push A',
-    exercises: ['Bench press', 'Incline DB press', 'Triceps pushdown'],
+    exercises: [
+      { name: 'Bench press', setCount: 4, repRange: [5, 8] },
+      { name: 'Incline DB press', setCount: 3, repRange: [8, 10] },
+      { name: 'Triceps pushdown', setCount: 3, repRange: [10, 12] },
+    ],
     rotationOrder: 1,
+    priorSets: {
+      // Mirrors PDF page 15's "LAST 82.5kg × 6, 6, 5, 4" Bench press
+      // example so the design frame can be reproduced on first run.
+      'Bench press': [
+        { kg: 82.5, reps: 6 },
+        { kg: 82.5, reps: 6 },
+        { kg: 82.5, reps: 5 },
+        { kg: 82.5, reps: 4 },
+      ],
+      'Incline DB press': [
+        { kg: 20, reps: 8 },
+        { kg: 20, reps: 8 },
+        { kg: 20, reps: 7 },
+      ],
+      'Triceps pushdown': [
+        { kg: 35, reps: 12 },
+        { kg: 35, reps: 11 },
+        { kg: 35, reps: 10 },
+      ],
+    },
   },
   {
     id: 'wt-pull-a',
     name: 'Pull A',
-    exercises: ['Deadlift', 'Pull-up', 'Barbell row'],
+    exercises: [
+      { name: 'Deadlift', setCount: 3, repRange: [3, 5] },
+      { name: 'Pull-up', setCount: 4, repRange: [6, 10] },
+      { name: 'Barbell row', setCount: 3, repRange: [8, 10] },
+    ],
     rotationOrder: 2,
+    priorSets: {
+      'Deadlift': [
+        { kg: 140, reps: 5 },
+        { kg: 140, reps: 4 },
+        { kg: 140, reps: 3 },
+      ],
+      'Pull-up': [
+        { kg: 0, reps: 10 },
+        { kg: 0, reps: 8 },
+        { kg: 0, reps: 7 },
+        { kg: 0, reps: 6 },
+      ],
+      'Barbell row': [
+        { kg: 70, reps: 10 },
+        { kg: 70, reps: 9 },
+        { kg: 70, reps: 8 },
+      ],
+    },
   },
   {
     id: 'wt-legs-a',
     name: 'Legs A',
-    exercises: ['Back squat', 'Romanian deadlift', 'Calf raise'],
+    exercises: [
+      { name: 'Back squat', setCount: 4, repRange: [5, 8] },
+      { name: 'Romanian deadlift', setCount: 3, repRange: [8, 10] },
+      { name: 'Calf raise', setCount: 3, repRange: [10, 15] },
+    ],
     rotationOrder: 3,
+    priorSets: {
+      'Back squat': [
+        { kg: 110, reps: 8 },
+        { kg: 110, reps: 7 },
+        { kg: 110, reps: 6 },
+        { kg: 110, reps: 5 },
+      ],
+      'Romanian deadlift': [
+        { kg: 90, reps: 10 },
+        { kg: 90, reps: 9 },
+        { kg: 90, reps: 8 },
+      ],
+      'Calf raise': [
+        { kg: 60, reps: 15 },
+        { kg: 60, reps: 13 },
+        { kg: 60, reps: 12 },
+      ],
+    },
   },
   {
     id: 'wt-push-b',
     name: 'Push B',
-    exercises: ['Overhead press', 'Lateral raise', 'Dumbbell flye'],
+    exercises: [
+      { name: 'Overhead press', setCount: 4, repRange: [5, 8] },
+      { name: 'Lateral raise', setCount: 3, repRange: [10, 12] },
+      { name: 'Dumbbell flye', setCount: 3, repRange: [10, 12] },
+    ],
     rotationOrder: 4,
+    priorSets: {
+      'Overhead press': [
+        { kg: 50, reps: 8 },
+        { kg: 50, reps: 7 },
+        { kg: 50, reps: 6 },
+        { kg: 50, reps: 5 },
+      ],
+      'Lateral raise': [
+        { kg: 8, reps: 12 },
+        { kg: 8, reps: 11 },
+        { kg: 8, reps: 10 },
+      ],
+      'Dumbbell flye': [
+        { kg: 12, reps: 12 },
+        { kg: 12, reps: 11 },
+        { kg: 12, reps: 10 },
+      ],
+    },
   },
 ];
 

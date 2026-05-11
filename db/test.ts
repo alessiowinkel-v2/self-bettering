@@ -223,6 +223,44 @@ export async function runDbTests(): Promise<{
     })
   );
 
+  // Idempotency: double-tap on the Log button must not produce two rows.
+  // Migration 0004's UNIQUE(workout_id, exercise_name, set_number) plus
+  // logSet's try/catch on UNIQUE constraint failure should leave exactly
+  // one row after two calls with the same logical tuple.
+  results.push(
+    await runOne('logSet is idempotent on (workout_id, exercise_name, set_number)', async () => {
+      await seedDev('default');
+      const templates = await getWorkoutTemplates();
+      const template = templates[0];
+      const w = await startWorkout({ templateId: template.id });
+      await logSet({
+        workoutId: w.id,
+        exerciseName: 'Bench press',
+        setNumber: 1,
+        kg: 82.5,
+        reps: 6,
+      });
+      await logSet({
+        workoutId: w.id,
+        exerciseName: 'Bench press',
+        setNumber: 1,
+        kg: 82.5,
+        reps: 6,
+      });
+      const db = await getDB();
+      const row = await db.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) AS count
+           FROM sets
+          WHERE workout_id = ?
+            AND exercise_name = ?
+            AND set_number = ?;`,
+        [w.id, 'Bench press', 1]
+      );
+      await assertEqual(row?.count ?? 0, 1, 'Two logSet calls should leave exactly one row.');
+      await completeWorkout({ id: w.id, durationSeconds: 60 });
+    })
+  );
+
   // Sanity: insertWorkoutTemplate + createHabit are referenced during
   // operation. Touch them so dev cycles flag if they regress.
   results.push(
@@ -233,7 +271,10 @@ export async function runDbTests(): Promise<{
       await insertWorkoutTemplate({
         id: 'wt-test',
         name: 'Test',
-        exercises: ['A', 'B'],
+        exercises: [
+          { name: 'A', setCount: 3, repRange: [5, 8] },
+          { name: 'B', setCount: 3, repRange: [5, 8] },
+        ],
       });
       const all = await getWorkoutTemplates();
       await assert(all.some((t) => t.id === 'wt-test'), 'Inserted template should be readable.');

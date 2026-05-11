@@ -1,4 +1,4 @@
-import type { WorkoutTemplate } from '../state/types';
+import type { WorkoutTemplate, WorkoutTemplateExercise } from '../state/types';
 import { getDB } from './db';
 import { workoutId } from './ids';
 
@@ -29,12 +29,30 @@ type WorkoutTemplateRow = {
   exercises: string;
 };
 
+/**
+ * Type-guard for a single exercise entry on disk. Validates each field
+ * rather than trusting the column — the JSON shape changed in Phase 3f
+ * and prior installs may carry the old `string[]` form. Malformed
+ * entries are dropped silently so the screen stays renderable.
+ */
+function isWorkoutTemplateExercise(e: unknown): e is WorkoutTemplateExercise {
+  if (typeof e !== 'object' || e === null) return false;
+  const obj = e as Record<string, unknown>;
+  if (typeof obj.name !== 'string') return false;
+  if (typeof obj.setCount !== 'number' || obj.setCount <= 0) return false;
+  if (!Array.isArray(obj.repRange) || obj.repRange.length !== 2) return false;
+  if (typeof obj.repRange[0] !== 'number' || typeof obj.repRange[1] !== 'number') {
+    return false;
+  }
+  return true;
+}
+
 function rowToTemplate(row: WorkoutTemplateRow): WorkoutTemplate {
-  let exercises: ReadonlyArray<string> = [];
+  let exercises: ReadonlyArray<WorkoutTemplateExercise> = [];
   try {
     const parsed: unknown = JSON.parse(row.exercises);
     if (Array.isArray(parsed)) {
-      exercises = parsed.filter((e): e is string => typeof e === 'string');
+      exercises = parsed.filter(isWorkoutTemplateExercise);
     }
   } catch {
     exercises = [];
@@ -123,6 +141,49 @@ export async function completeWorkout(input: {
             duration_seconds = ?
       WHERE id = ?;`,
     [completedAt, input.durationSeconds, input.id]
+  );
+}
+
+/**
+ * Delete a workout row. `ON DELETE CASCADE` on `sets.workout_id`
+ * (migration 0001) wipes the associated set rows automatically.
+ *
+ * Used by the Active Workout back-out path: when the user confirms
+ * "End workout?" mid-session, the in-progress row plus any logged
+ * sets are discarded — no half-saved workouts left behind.
+ */
+export async function deleteWorkout(id: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`DELETE FROM workouts WHERE id = ?;`, [id]);
+}
+
+/**
+ * Boot-time cleanup of orphan workouts.
+ *
+ * A workout row with `completed_at IS NULL` represents an in-progress
+ * session — the user either is mid-workout right now (impossible at
+ * boot, since the screen isn't mounted yet) or force-quit while one
+ * was active. Without GC these rows accumulate forever and confuse
+ * future "most recent" / "last set" queries.
+ *
+ * Threshold: 24 hours from `started_at`. A user pressing the home
+ * button mid-workout and returning hours later loses the session;
+ * resume-in-progress is deferred to Phase 4 and would require a
+ * different surface anyway (Gym Home would need to show "in progress"
+ * routines). The 24h window is generous enough that nobody's real
+ * workout gets cleaned up by mistake.
+ *
+ * Idempotent: zero affected rows is the happy path. CASCADE on
+ * sets.workout_id wipes associated set rows.
+ */
+export async function cleanupOrphanWorkouts(): Promise<void> {
+  const db = await getDB();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await db.runAsync(
+    `DELETE FROM workouts
+      WHERE completed_at IS NULL
+        AND started_at < ?;`,
+    [cutoff]
   );
 }
 

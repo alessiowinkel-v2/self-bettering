@@ -126,7 +126,13 @@ export default function TodayScreen() {
   const nextWorkout = useMemo(() => {
     const template = workoutTemplates.find((t) => t.id === nextWorkoutTemplateId);
     return template
-      ? { template, previewLine: template.exercises.slice(0, 3).join(', ') }
+      ? {
+          template,
+          previewLine: template.exercises
+            .slice(0, 3)
+            .map((e) => e.name)
+            .join(', '),
+        }
       : null;
   }, [workoutTemplates, nextWorkoutTemplateId]);
 
@@ -226,7 +232,12 @@ export default function TodayScreen() {
           <NextWorkoutCard
             name={nextWorkout.template.name}
             previewLine={nextWorkout.previewLine}
-            onStart={() => {}}
+            onStart={() =>
+              router.push({
+                pathname: '/workout',
+                params: { templateId: nextWorkout.template.id },
+              })
+            }
           />
         </>
       ) : null}

@@ -3,6 +3,7 @@ import { seedFor, type SeedName } from '../dev/seedFixtures';
 import { toIsoDate } from '../utils/dateFormat';
 import { getDB } from './db';
 import { createHabit } from './habits';
+import { setId } from './ids';
 
 /**
  * Dev-only seeder. Wipes the domain tables and reinserts rows built from
@@ -113,17 +114,70 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
       );
     }
 
-    // Completed workout (only present on the 'today-is-done' seed).
+    // Per-template prior workout. One completed workout per template,
+    // staggered backwards from today by `(rotationOrder - 1) * 2 + 7`
+    // days so each template has its own "last" date that doesn't fall
+    // inside the current Mon–Sun week (Gym Home's THIS WEEK strip would
+    // otherwise show seeded workouts as completed-this-week, which
+    // contradicts the 'default' seed's "nothing logged this week"
+    // frame).
+    //
+    // Each workout's sets are pulled from the template's `priorSets`
+    // map so Active Workout's "LAST 82.5kg × 6, 6, 5, 4" line and the
+    // numeric-pad "last · X" pill populate on first run-through. Without
+    // these seeds, every exercise on every first-of-the-day workout
+    // would render as a first-ever session.
+    //
+    // Workouts with no completed_at are orphans (force-quit
+    // mid-workout). Boot-time cleanup deletes any older than 24h. Resume-
+    // in-progress would require surfacing them; deferred to Phase 4.
+    const nowIso = new Date().toISOString();
+    for (const t of seed.workoutTemplates) {
+      const daysBack = (t.rotationOrder - 1) * 2 + 7;
+      const completedDate = toIsoDate(subDays(new Date(), daysBack));
+      const startedAt = `${completedDate}T08:00:00.000Z`;
+      const completedAt = `${completedDate}T08:47:00.000Z`;
+      const priorWorkoutId = `w-seed-prior-${t.id}`;
+      await db.runAsync(
+        `INSERT INTO workouts (id, template_id, started_at, completed_at, duration_seconds)
+         VALUES (?, ?, ?, ?, ?);`,
+        [priorWorkoutId, t.id, startedAt, completedAt, 47 * 60]
+      );
+
+      for (const exercise of t.exercises) {
+        const prior = t.priorSets[exercise.name] ?? [];
+        for (let i = 0; i < prior.length; i += 1) {
+          const s = prior[i];
+          const setNumber = i + 1;
+          const id = `${setId(setNumber)}-seed-${t.id}-${i}`;
+          await db.runAsync(
+            `INSERT INTO sets (id, workout_id, exercise_name, set_number, kg, reps, logged_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?);`,
+            [id, priorWorkoutId, exercise.name, setNumber, s.kg, s.reps, nowIso]
+          );
+        }
+      }
+    }
+
+    // 'today-is-done' seed: an additional completed workout dated today
+    // so Today's Next-workout slot rolls into the "done" branch. Sets
+    // for this workout aren't seeded — the takeover doesn't render them
+    // and any future Exercise History view would treat the prior
+    // template-seeded sets as the source of truth anyway.
     if (seed.completedWorkoutDate && seed.workoutTemplates.length > 0) {
-      // Pair to the first template; the seed doesn't carry an explicit
-      // mapping and any choice is fine for a dev seed.
       const template = seed.workoutTemplates[0];
       const startedAt = `${seed.completedWorkoutDate}T08:00:00.000Z`;
       const completedAt = `${seed.completedWorkoutDate}T08:47:00.000Z`;
       await db.runAsync(
         `INSERT INTO workouts (id, template_id, started_at, completed_at, duration_seconds)
          VALUES (?, ?, ?, ?, ?);`,
-        [`w-seed-${seed.completedWorkoutDate}`, template.id, startedAt, completedAt, 47 * 60]
+        [
+          `w-seed-today-${seed.completedWorkoutDate}`,
+          template.id,
+          startedAt,
+          completedAt,
+          47 * 60,
+        ]
       );
     }
   });

@@ -13,6 +13,7 @@ import { TextButton } from '../components/primitives/Button';
 import { Screen } from '../components/primitives/Screen';
 import { Text } from '../components/primitives/Text';
 import { runMigrations } from '../db/migrate';
+import { cleanupOrphanWorkouts } from '../db/workouts';
 import { useTodayStore } from '../state/todayStore';
 import { ThemeProvider, useTheme, useThemeMode, useThemeStore } from '../theme';
 
@@ -53,6 +54,17 @@ export default function RootLayout() {
     setBootReady(false);
     let cancelled = false;
     runMigrations()
+      // Orphan workouts (in-progress rows older than 24h) get GC'd
+      // before Today hydrates. Resume-in-progress would surface these
+      // somewhere instead — deferred to Phase 4. Failure here is
+      // non-fatal: log and continue, the rows just stay until the
+      // next successful boot.
+      .then(() =>
+        cleanupOrphanWorkouts().catch((e: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('[boot] cleanupOrphanWorkouts failed:', e);
+        }),
+      )
       .then(() => useTodayStore.getState().hydrate())
       .then(() => {
         if (!cancelled) setBootReady(true);
@@ -96,6 +108,10 @@ function RootStack() {
         <Stack.Screen name="habit/[id]" />
         <Stack.Screen name="journal/[date]" />
         <Stack.Screen name="settings" />
+        <Stack.Screen
+          name="workout"
+          options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
+        />
         {__DEV__ ? (
           <Stack.Screen name="design" options={{ presentation: 'modal' }} />
         ) : null}

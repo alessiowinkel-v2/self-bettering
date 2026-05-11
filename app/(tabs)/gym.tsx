@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { GymEmpty, RoutineRow } from '../../components/gym';
@@ -34,6 +34,14 @@ import { buildGymWeekDots, formatRelativeDate } from '../../utils/gymHome';
  */
 export default function GymScreen() {
   const theme = useTheme();
+  const router = useRouter();
+
+  const startWorkout = useCallback(
+    (templateId: string) => {
+      router.push({ pathname: '/workout', params: { templateId } });
+    },
+    [router],
+  );
 
   const templates = useGymHomeStore((s) => s.templates);
   const nextTemplateId = useGymHomeStore((s) => s.nextTemplateId);
@@ -59,7 +67,13 @@ export default function GymScreen() {
   );
 
   const nextPreviewLine = useMemo(
-    () => (nextTemplate ? nextTemplate.exercises.slice(0, 3).join(', ') : ''),
+    () =>
+      nextTemplate
+        ? nextTemplate.exercises
+            .slice(0, 3)
+            .map((e) => e.name)
+            .join(', ')
+        : '',
     [nextTemplate],
   );
 
@@ -107,7 +121,7 @@ export default function GymScreen() {
           <NextWorkoutCard
             name={nextTemplate.name}
             previewLine={nextPreviewLine}
-            onStart={() => console.log('[gym] start pressed', nextTemplate.id)}
+            onStart={() => startWorkout(nextTemplate.id)}
           />
         </>
       ) : null}
@@ -149,9 +163,7 @@ export default function GymScreen() {
               subtitle={subtitle}
               isNextUp={row.template.id === nextTemplateId}
               isLast={i === templates.length - 1}
-              onPress={() =>
-                console.log('[gym] routine pressed', row.template.id)
-              }
+              onPress={() => startWorkout(row.template.id)}
             />
           );
         })}
