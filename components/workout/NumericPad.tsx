@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Delete } from 'lucide-react-native';
 import { useTheme } from '../../theme';
-import { FilledButton, Text } from '../primitives';
+import { Text, TextButton } from '../primitives';
 import { formatKg } from '../../utils/workout';
 
 export type NumericPadMode = 'kg' | 'reps';
@@ -169,13 +169,25 @@ export function NumericPad({
             <KeyButton label="" onPress={backspace} icon="backspace" />
           </PadRow>
         </View>
-        {/* Log column — 1 col × 4 rows, but Log only fills the top row */}
-        <View style={{ flex: 1, gap: theme.spacing[2] }}>
-          <FilledButton
+        {/* Log column — 1 col × 4 rows, but Log only fills the top row.
+            Text-amber Log (TextButton tone='accent') matches the
+            Held/Slipped pattern: daily/repeat actions never use
+            FilledButton. The filled-button rule reserves filled amber
+            for first-time empty-state CTAs only. The Log key here is
+            visually weighted via the column's wider footprint and the
+            amber tone, not via a fill. */}
+        <View
+          style={{
+            flex: 1,
+            minHeight: 56,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <TextButton
             label="Log"
             onPress={commit}
             accessibilityLabel={`Log ${mode}`}
-            style={{ minHeight: 64 }}
           />
         </View>
       </View>

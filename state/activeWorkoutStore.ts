@@ -7,7 +7,6 @@ import {
 } from '../db/sets';
 import {
   completeWorkout,
-  deleteWorkout,
   getWorkoutTemplates,
   startWorkout,
 } from '../db/workouts';
@@ -256,10 +255,15 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
   },
 
   abandon: async () => {
-    const state = get();
-    if (state.workoutId !== null) {
-      await deleteWorkout(state.workoutId);
-    }
+    // Reset the active slice but leave the workout row on disk. Sets
+    // logged so far are preserved as an orphan workout (completed_at
+    // IS NULL); the 24h boot-cleanup in cleanupOrphanWorkouts will
+    // GC the row if it's never resumed. Phase 4 will surface
+    // resumable orphans on Gym Home.
+    //
+    // This is what the "End workout." Alert promises ("Sets logged
+    // so far are kept.") — abandon stops the session without
+    // destroying data.
     set(initialState);
   },
 

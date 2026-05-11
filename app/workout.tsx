@@ -35,7 +35,9 @@ import { formatElapsed } from '../utils/workout';
  *   save         → completeAndSave writes completed_at + duration;
  *                  router.back() returns to the entry point
  *   abandon      → confirmed via Alert.alert from the back chevron;
- *                  deleteWorkout drops the row + sets via CASCADE
+ *                  the in-progress row is left on disk so logged
+ *                  sets survive until the 24h orphan-cleanup, or
+ *                  until Phase 4 surfaces resume-in-progress
  *
  * Elapsed time and rest countdown are screen-local:
  *   `now` ticks every second via setInterval and drives both the
@@ -206,12 +208,12 @@ export default function WorkoutScreen() {
       return;
     }
     Alert.alert(
-      'End workout?',
-      'Your progress will be lost.',
+      'End workout.',
+      'Sets logged so far are kept.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep going.', style: 'cancel' },
         {
-          text: 'End workout',
+          text: 'End.',
           style: 'destructive',
           onPress: async () => {
             await abandon();
@@ -264,14 +266,20 @@ export default function WorkoutScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       edges={['top']}
     >
-      {/* Header row */}
+      {/* Header row.
+          Side elements are absolute-positioned so the centered title
+          sits on the visual midline regardless of how wide the back
+          chevron and elapsed timer happen to be. A simple
+          space-between row would float the title left of center when
+          the two gutters have different widths. The wrapper still
+          takes up vertical room via the centered title's intrinsic
+          height + padding. */}
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           paddingHorizontal: theme.spacing[5],
           paddingVertical: theme.spacing[3],
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
         <Pressable
@@ -279,7 +287,13 @@ export default function WorkoutScreen() {
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="End workout"
-          style={{ minWidth: 32 }}
+          style={{
+            position: 'absolute',
+            left: theme.spacing[5],
+            top: 0,
+            bottom: 0,
+            justifyContent: 'center',
+          }}
         >
           <ChevronLeft
             size={24}
@@ -290,7 +304,15 @@ export default function WorkoutScreen() {
         <Text variant="label" tone="secondary">
           {templateName.toUpperCase()}
         </Text>
-        <View style={{ minWidth: 56, alignItems: 'flex-end' }}>
+        <View
+          style={{
+            position: 'absolute',
+            right: theme.spacing[5],
+            top: 0,
+            bottom: 0,
+            justifyContent: 'center',
+          }}
+        >
           <Text variant="caption" tone="secondary">
             {formatElapsed(elapsedSeconds)}
           </Text>
@@ -323,7 +345,11 @@ export default function WorkoutScreen() {
               />
             </View>
 
-            <View style={{ marginTop: theme.spacing[5] }}>
+            {/* SETS group header. Same small-caps + secondary treatment
+                as the "LAST" line in ExerciseHeader, and the same
+                spacing[4] top margin against its preceding sibling so
+                the two labels read as a single rhythm. */}
+            <View style={{ marginTop: theme.spacing[4] }}>
               <Text
                 variant="label"
                 tone="secondary"

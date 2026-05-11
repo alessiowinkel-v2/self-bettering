@@ -145,19 +145,6 @@ export async function completeWorkout(input: {
 }
 
 /**
- * Delete a workout row. `ON DELETE CASCADE` on `sets.workout_id`
- * (migration 0001) wipes the associated set rows automatically.
- *
- * Used by the Active Workout back-out path: when the user confirms
- * "End workout?" mid-session, the in-progress row plus any logged
- * sets are discarded — no half-saved workouts left behind.
- */
-export async function deleteWorkout(id: string): Promise<void> {
-  const db = await getDB();
-  await db.runAsync(`DELETE FROM workouts WHERE id = ?;`, [id]);
-}
-
-/**
  * Boot-time cleanup of orphan workouts.
  *
  * A workout row with `completed_at IS NULL` represents an in-progress
