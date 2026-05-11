@@ -82,8 +82,21 @@ type ActiveWorkoutState = {
   startNewWorkout: (templateId: string) => Promise<void>;
   logCurrentSet: (input: { kg: number; reps: number }) => Promise<void>;
   skipRest: () => void;
+  /**
+   * Persists `completed_at` + `duration_seconds`. Does NOT reset the
+   * store — `status` stays at `'done'` so the DoneTakeover stays
+   * painted through the navigation. The screen's mount effect resets
+   * the slot to 'idle' on the next /workout open via `resetToIdle`.
+   */
   completeAndSave: () => Promise<void>;
   abandon: () => Promise<void>;
+  /**
+   * Reset the active-workout slice to `initialState`. The screen's
+   * mount effect calls this once on each open iff the current status
+   * is 'done' — handling the post-save handoff without flashing a
+   * blank screen between completeAndSave and router.back().
+   */
+  resetToIdle: () => void;
   reset: () => void;
 };
 
@@ -237,7 +250,9 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       completedAt,
       durationSeconds,
     });
-    set(initialState);
+    // Intentionally leaves status at 'done'. The screen pops via
+    // router.back() while DoneTakeover stays mounted; the next
+    // /workout open calls resetToIdle on mount to clear the slot.
   },
 
   abandon: async () => {
@@ -245,6 +260,10 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
     if (state.workoutId !== null) {
       await deleteWorkout(state.workoutId);
     }
+    set(initialState);
+  },
+
+  resetToIdle: () => {
     set(initialState);
   },
 

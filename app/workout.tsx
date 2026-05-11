@@ -71,20 +71,37 @@ export default function WorkoutScreen() {
   const completeAndSave = useActiveWorkoutStore((s) => s.completeAndSave);
   const abandon = useActiveWorkoutStore((s) => s.abandon);
   const reset = useActiveWorkoutStore((s) => s.reset);
+  const resetToIdle = useActiveWorkoutStore((s) => s.resetToIdle);
 
-  // Bootstrap on mount. The store is single-writer so re-entering the
-  // route with a different templateId while a workout exists is treated
-  // as "abandon and restart" — though in practice the screen is a
-  // fullScreenModal and never re-mounts mid-workout. The status check
-  // guards Fast Refresh from re-arming a fresh workout on top of an
-  // active one during dev.
+  // Bootstrap on mount.
+  //
+  // Two responsibilities sequenced in a single effect so ordering is
+  // explicit (mount-reset before bootstrap):
+  //   1. If the prior workout left status at 'done' (just saved and
+  //      navigated away), clear it. Without this the bootstrap gate
+  //      below sees status === 'done' and skips startNewWorkout.
+  //   2. Decide whether to bootstrap a fresh workout. Reads from
+  //      getState() so the gate sees the post-reset slot, not the
+  //      stale closure value.
+  //
+  // Single-writer store; Fast Refresh during dev is the only way this
+  // effect re-fires mid-workout (params.templateId is stable across
+  // a session). The status check prevents Fast Refresh from arming a
+  // second workout on top of an active one.
   useEffect(() => {
     const tid = params.templateId;
     if (typeof tid !== 'string' || tid.length === 0) {
       router.back();
       return;
     }
-    if (status === 'idle' || (templateId !== tid && status !== 'loading')) {
+    if (useActiveWorkoutStore.getState().status === 'done') {
+      resetToIdle();
+    }
+    const fresh = useActiveWorkoutStore.getState();
+    if (
+      fresh.status === 'idle' ||
+      (fresh.templateId !== tid && fresh.status !== 'loading')
+    ) {
       void startNewWorkout(tid).catch(() => {
         router.back();
       });
