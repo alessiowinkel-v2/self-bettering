@@ -16,6 +16,18 @@ Rules of thumb:
 
 When in doubt, cut the sentence in half and add a period.
 
+### Three buckets for terminal punctuation
+
+Every user-facing string falls into one of three buckets. Picking the right bucket decides whether the string ends with a period.
+
+- **Statements** end with a period. Captions, empty-state body lines, error messages, alert body copy, status lines, greetings. "All held today." / "No habits yet." / "Could not save." / "Morning."
+- **Labels** take no period. Small-caps eyebrows and inline metadata. `LAST 90 DAYS` / `IN PROGRESS` / `SAVED` / `BEST` / `CURRENT STREAK` / `DAY ONE` / `STARTED OVER TODAY`. The visual treatment carries the meaning — a period would read as an artifact.
+- **Action labels** take no period. Buttons, links, alert buttons, in-picker actions, empty-state CTAs, retry affordances, input placeholders. `Held` / `Slipped` / `Log` / `Save workout` / `Cancel` / `Try again` / `Turn off` / `Add one` / `Write` / `Habit name`.
+
+When in doubt, ask: is this string the verb the user is being invited to perform? If yes, no period. Is it a small-caps eyebrow or metadata chip? No period. Otherwise, period.
+
+The same voice fragment can render differently in different buckets. "Day one." is a canonical voice statement quoted above; rendered as the eyebrow under the streak number it becomes the label `DAY ONE` (no period). The voice carries through, the punctuation follows the bucket.
+
 ## Type
 
 - **Display & headings:** Fraunces. Used for screen titles ("Today.", "No nicotine", "Bench press"), date headers ("Wednesday, May 6"), and the big streak number on Habit Detail. Italic for soft states ("All held today.", "Last one.", "Done. 47 minutes.").

@@ -15,6 +15,7 @@ import { logSet } from './sets';
 import {
   completeWorkout,
   getMostRecentCompletedWorkoutDate,
+  getMostRecentOrphan,
   getWorkoutTemplates,
   insertWorkoutTemplate,
   startWorkout,
@@ -258,6 +259,64 @@ export async function runDbTests(): Promise<{
       );
       await assertEqual(row?.count ?? 0, 1, 'Two logSet calls should leave exactly one row.');
       await completeWorkout({ id: w.id, durationSeconds: 60 });
+    })
+  );
+
+  // Resume-in-progress: getMostRecentOrphan picks up the in-progress
+  // exercise inside a three-exercise template after fully logging the
+  // first exercise and two of three sets on the second. The walking
+  // rule should land on the second exercise with currentSetNumber 3.
+  results.push(
+    await runOne('getMostRecentOrphan walks template to in-progress set', async () => {
+      await seedDev('default');
+      const templates = await getWorkoutTemplates();
+      const template = templates.find((t) => t.exercises.length >= 3);
+      await assert(template !== undefined, 'Need a 3+ exercise template');
+      const [first, second] = template!.exercises;
+
+      const w = await startWorkout({ templateId: template!.id });
+      // Fully log the first exercise.
+      for (let i = 1; i <= first.setCount; i += 1) {
+        await logSet({
+          workoutId: w.id,
+          exerciseName: first.name,
+          setNumber: i,
+          kg: 80,
+          reps: 6,
+        });
+      }
+      // Two of three sets on the second exercise.
+      await logSet({
+        workoutId: w.id,
+        exerciseName: second.name,
+        setNumber: 1,
+        kg: 20,
+        reps: 8,
+      });
+      await logSet({
+        workoutId: w.id,
+        exerciseName: second.name,
+        setNumber: 2,
+        kg: 20,
+        reps: 8,
+      });
+
+      const orphan = await getMostRecentOrphan();
+      await assert(orphan !== null, 'Orphan workout should be reported');
+      await assertEqual(orphan!.workoutId, w.id, 'Orphan id matches');
+      await assertEqual(orphan!.templateId, template!.id, 'Template id matches');
+      await assertEqual(
+        orphan!.currentExerciseName,
+        second.name,
+        'Second exercise is the in-progress one',
+      );
+      await assertEqual(orphan!.currentSetNumber, 3, 'Next set is set 3');
+      await assertEqual(
+        orphan!.totalSetsForExercise,
+        second.setCount,
+        'totalSetsForExercise carries the prescription',
+      );
+      await assert(orphan!.elapsedMinutes >= 0, 'elapsed cannot be negative');
     })
   );
 

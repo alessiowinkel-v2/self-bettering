@@ -24,13 +24,13 @@ export function StatusLabel({ variant }: StatusLabelProps) {
 export function labelFor(variant: HabitLifecycleVariant): string {
   switch (variant) {
     case 'archived':
-      return 'ARCHIVED.';
+      return 'ARCHIVED';
     case 'paused':
-      return 'PAUSED.';
+      return 'PAUSED';
     case 'just-slipped':
-      return 'STARTED OVER TODAY.';
+      return 'STARTED OVER TODAY';
     case 'day-one':
-      return 'DAY ONE.';
+      return 'DAY ONE';
     case 'normal':
       return 'CURRENT STREAK';
   }

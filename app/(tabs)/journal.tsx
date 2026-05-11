@@ -100,7 +100,7 @@ export default function JournalScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing[4] }}>
             <TextButton
-              label="Write something."
+              label="Write"
               onPress={() => router.push(`/journal/${todayIso()}`)}
               accessibilityLabel="Write today's journal entry"
             />

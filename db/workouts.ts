@@ -212,6 +212,111 @@ export async function getWorkoutTemplatesWithLastCompleted(): Promise<
 }
 
 /**
+ * Snapshot of the most recent orphan workout — an in-progress row whose
+ * `started_at` is within the last 24h. Drives Gym Home's resume-in-progress
+ * card and the workout screen's bootstrap branch.
+ *
+ * Returns `null` if no orphan exists or if every orphan is older than 24h
+ * (the boot-time cleanup will sweep those on next launch).
+ *
+ * `currentExerciseName` / `currentSetNumber` are computed by walking the
+ * template's exercises in order; the first exercise whose logged-set count
+ * falls short of its prescription is the in-progress one, and the next
+ * set to log is one past that count. If every exercise is fully logged
+ * (shouldn't happen — would mean the user logged the final set but
+ * never tapped Save), we return the last exercise with set count clamped
+ * to setCount so the card stays renderable.
+ */
+export type ResumableOrphan = {
+  workoutId: string;
+  templateId: string;
+  startedAt: string;
+  currentExerciseName: string;
+  currentSetNumber: number;
+  totalSetsForExercise: number;
+  elapsedMinutes: number;
+};
+
+export async function getMostRecentOrphan(): Promise<ResumableOrphan | null> {
+  const db = await getDB();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const row = await db.getFirstAsync<{
+    id: string;
+    template_id: string;
+    started_at: string;
+  }>(
+    `SELECT id, template_id, started_at
+       FROM workouts
+      WHERE completed_at IS NULL
+        AND started_at > ?
+      ORDER BY started_at DESC
+      LIMIT 1;`,
+    [cutoff]
+  );
+  if (!row) return null;
+
+  // Resolve the template so we can walk its prescribed exercises in
+  // order. If the template was deleted between the orphan's start and
+  // now, the resume can't be reconstructed cleanly — surface as null so
+  // Gym Home falls back to the next-up card.
+  const templateRow = await db.getFirstAsync<WorkoutTemplateRow>(
+    `SELECT id, name, exercises
+       FROM workout_templates
+      WHERE id = ?;`,
+    [row.template_id]
+  );
+  if (!templateRow) return null;
+  const template = rowToTemplate(templateRow);
+  if (template.exercises.length === 0) return null;
+
+  // Group logged sets by exercise_name so we can count progress per
+  // prescribed exercise.
+  const setRows = await db.getAllAsync<{
+    exercise_name: string;
+    set_number: number;
+  }>(
+    `SELECT exercise_name, set_number
+       FROM sets
+      WHERE workout_id = ?
+      ORDER BY exercise_name, set_number;`,
+    [row.id]
+  );
+  const loggedCountByExercise = new Map<string, number>();
+  for (const s of setRows) {
+    loggedCountByExercise.set(
+      s.exercise_name,
+      (loggedCountByExercise.get(s.exercise_name) ?? 0) + 1
+    );
+  }
+
+  // Walk the template in prescribed order. First exercise that has
+  // fewer logged sets than its setCount is the current one.
+  let currentExercise = template.exercises[template.exercises.length - 1];
+  let currentSetNumber = currentExercise.setCount;
+  for (const ex of template.exercises) {
+    const logged = loggedCountByExercise.get(ex.name) ?? 0;
+    if (logged < ex.setCount) {
+      currentExercise = ex;
+      currentSetNumber = logged + 1;
+      break;
+    }
+  }
+
+  const elapsedMs = Date.now() - new Date(row.started_at).getTime();
+  const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+
+  return {
+    workoutId: row.id,
+    templateId: row.template_id,
+    startedAt: row.started_at,
+    currentExerciseName: currentExercise.name,
+    currentSetNumber,
+    totalSetsForExercise: currentExercise.setCount,
+    elapsedMinutes,
+  };
+}
+
+/**
  * Distinct ISO dates (YYYY-MM-DD) on which any workout was completed
  * within [startDate, endDate], inclusive. Drives the Gym Home week
  * strip — one filled dot per day with at least one completion.

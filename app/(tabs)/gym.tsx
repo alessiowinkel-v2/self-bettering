@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { GymEmpty, RoutineRow } from '../../components/gym';
 import {
@@ -10,6 +10,7 @@ import {
   WeekDots,
 } from '../../components/primitives';
 import { NextWorkoutCard } from '../../components/workout';
+import { getMostRecentOrphan, type ResumableOrphan } from '../../db/workouts';
 import { useGymHomeStore } from '../../state/gymHomeStore';
 import { useTheme } from '../../theme';
 import { buildGymWeekDots, formatRelativeDate } from '../../utils/gymHome';
@@ -54,9 +55,24 @@ export default function GymScreen() {
   const referenceDate = useGymHomeStore((s) => s.referenceDate);
   const isHydrated = useGymHomeStore((s) => s.isHydrated);
 
+  // Orphan state is screen-local: source of truth is the DB, no other
+  // screen needs it, and re-reading on focus is the right cadence
+  // (Active Workout writes to the workouts table on abandon/resume —
+  // by the time the user lands back on Gym Home, focus fires and the
+  // snapshot is current). Static read on mount/focus also matches the
+  // design intent: elapsed minutes are a glance, not a tick.
+  const [orphan, setOrphan] = useState<ResumableOrphan | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       void useGymHomeStore.getState().hydrate();
+      let cancelled = false;
+      void getMostRecentOrphan().then((o) => {
+        if (!cancelled) setOrphan(o);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
 
@@ -75,6 +91,19 @@ export default function GymScreen() {
             .join(', ')
         : '',
     [nextTemplate],
+  );
+
+  // The orphan's template — looked up from the hydrated templates list
+  // so we have its display name without an extra read. If the orphan
+  // points at a template the user just deleted, fall through to the
+  // next-up card.
+  const orphanTemplate = useMemo(
+    () =>
+      orphan
+        ? templates.find((t) => t.template.id === orphan.templateId)?.template ??
+          null
+        : null,
+    [orphan, templates],
   );
 
   const weekDots = useMemo(
@@ -115,7 +144,20 @@ export default function GymScreen() {
     <Screen>
       {Title}
 
-      {nextTemplate ? (
+      {orphan && orphanTemplate ? (
+        <>
+          <SectionHeader marginTop={0}>Up next</SectionHeader>
+          <NextWorkoutCard
+            mode="in-progress"
+            name={orphanTemplate.name}
+            currentExerciseName={orphan.currentExerciseName}
+            currentSetNumber={orphan.currentSetNumber}
+            totalSetsForExercise={orphan.totalSetsForExercise}
+            elapsedMinutes={orphan.elapsedMinutes}
+            onResume={() => startWorkout(orphan.templateId)}
+          />
+        </>
+      ) : nextTemplate ? (
         <>
           <SectionHeader marginTop={0}>Up next</SectionHeader>
           <NextWorkoutCard

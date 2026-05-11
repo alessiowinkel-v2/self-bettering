@@ -149,7 +149,7 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
         for (let i = 0; i < prior.length; i += 1) {
           const s = prior[i];
           const setNumber = i + 1;
-          const id = `${setId(setNumber)}-seed-${t.id}-${i}`;
+          const id = setId(setNumber);
           await db.runAsync(
             `INSERT INTO sets (id, workout_id, exercise_name, set_number, kg, reps, logged_at)
              VALUES (?, ?, ?, ?, ?, ?, ?);`,

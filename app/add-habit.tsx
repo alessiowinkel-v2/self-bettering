@@ -82,7 +82,7 @@ export default function AddHabitModal() {
         <TextInput
           value={value}
           onChangeText={handleChangeText}
-          placeholder="Habit name."
+          placeholder="Habit name"
           placeholderTextColor={theme.colors.textTertiary}
           autoFocus
           returnKeyType="done"

@@ -6,3 +6,5 @@ export { EmptyToday } from './EmptyToday';
 export { TodayIsDone } from './TodayIsDone';
 export { NoJournalYetCard } from './NoJournalYetCard';
 export { SettingsCog } from './SettingsCog';
+export { BackupReminderCard } from './BackupReminderCard';
+export { AnimatedStreakNumber } from './AnimatedStreakNumber';

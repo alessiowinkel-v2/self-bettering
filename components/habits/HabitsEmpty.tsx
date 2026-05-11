@@ -25,7 +25,7 @@ export function HabitsEmpty({ onAdd }: HabitsEmptyProps) {
         No habits yet.
       </Text>
       <View style={{ height: theme.spacing[3] }} />
-      <TextButton label="Add one." onPress={onAdd} accessibilityLabel="Add a habit" />
+      <TextButton label="Add one" onPress={onAdd} accessibilityLabel="Add a habit" />
     </View>
   );
 }

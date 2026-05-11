@@ -7,13 +7,14 @@ import { Inter_400Regular, Inter_500Medium, useFonts as useInter } from '@expo-g
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState, type ComponentType } from 'react';
-import { View } from 'react-native';
+import { AppState, View, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TextButton } from '../components/primitives/Button';
 import { Screen } from '../components/primitives/Screen';
 import { Text } from '../components/primitives/Text';
 import { runMigrations } from '../db/migrate';
 import { cleanupOrphanWorkouts } from '../db/workouts';
+import { useBackupReminderStore } from '../state/backupReminderStore';
 import { useTodayStore } from '../state/todayStore';
 import { ThemeProvider, useTheme, useThemeMode, useThemeStore } from '../theme';
 
@@ -83,6 +84,21 @@ export default function RootLayout() {
     setBootAttempt((n) => n + 1);
   }, []);
 
+  // AppState → backup reminder bridge. Bumping the tick on each
+  // background→active transition re-renders subscribers (Today's
+  // BackupReminderCard) so shouldShowReminder re-evaluates with a
+  // fresh `new Date()`. Without this, a Today screen mounted before
+  // backgrounding would stay stale across a day-rollover crossing
+  // the 30-day mark.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (status: AppStateStatus) => {
+      if (status === 'active') {
+        useBackupReminderStore.getState().bumpForegroundTick();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   if (!fraunces || !inter || !hasHydrated) return null;
 
   return (
@@ -149,9 +165,9 @@ function BootErrorScreen({
           </Text>
           <View style={{ marginTop: spacing[5] }}>
             <TextButton
-              label="Try again."
+              label="Try again"
               onPress={onRetry}
-              accessibilityLabel="Try again."
+              accessibilityLabel="Try again"
             />
           </View>
         </View>

@@ -102,7 +102,7 @@ export function CheckInRow({
       {value !== null ? (
         <View style={{ alignItems: 'flex-end' }}>
           <TextButton
-            label="Turn off."
+            label="Turn off"
             onPress={turnOff}
             tone="secondary"
             accessibilityLabel={`Turn off ${title.toLowerCase()}`}

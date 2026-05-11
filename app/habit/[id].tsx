@@ -217,7 +217,7 @@ export default function HabitDetailScreen() {
 
   if (state.kind === 'loading') {
     return (
-      <Screen edges={[]}>
+      <Screen edges={['bottom']}>
         <Stack.Screen options={STACK_OPTIONS} />
       </Screen>
     );
@@ -225,7 +225,7 @@ export default function HabitDetailScreen() {
 
   if (state.kind === 'not-found') {
     return (
-      <Screen edges={[]}>
+      <Screen edges={['bottom']}>
         <Stack.Screen options={STACK_OPTIONS} />
         <View style={{ marginTop: titleTopPad }}>
           <Text variant="displayItalic" tone="secondary">
@@ -255,7 +255,7 @@ export default function HabitDetailScreen() {
   const showSince = !isDayOne;
 
   return (
-    <Screen edges={[]}>
+    <Screen edges={['bottom']}>
       <Stack.Screen options={STACK_OPTIONS} />
 
       <View style={{ marginTop: titleTopPad }}>

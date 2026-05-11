@@ -25,7 +25,7 @@ export function GymEmpty({ onAdd }: GymEmptyProps) {
         No routines yet.
       </Text>
       <View style={{ height: theme.spacing[3] }} />
-      <TextButton label="Add one." onPress={onAdd} accessibilityLabel="Add a routine" />
+      <TextButton label="Add one" onPress={onAdd} accessibilityLabel="Add a routine" />
     </View>
   );
 }

@@ -18,7 +18,9 @@ import { useActiveWorkoutStore, selectIsLastSet } from '../state/activeWorkoutSt
 import { useGymHomeStore } from '../state/gymHomeStore';
 import { useTodayStore } from '../state/todayStore';
 import { useTheme } from '../theme';
+import { haptics } from '../utils/haptics';
 import { formatElapsed } from '../utils/workout';
+import { getMostRecentOrphan } from '../db/workouts';
 
 /**
  * Active Workout screen. Full-screen modal route at `/workout?templateId=...`.
@@ -86,6 +88,7 @@ export default function WorkoutScreen() {
   const restEndsAt = useActiveWorkoutStore((s) => s.restEndsAt);
   const isLastSet = useActiveWorkoutStore(selectIsLastSet);
   const startNewWorkout = useActiveWorkoutStore((s) => s.startNewWorkout);
+  const resumeWorkout = useActiveWorkoutStore((s) => s.resumeWorkout);
   const logCurrentSet = useActiveWorkoutStore((s) => s.logCurrentSet);
   const skipRest = useActiveWorkoutStore((s) => s.skipRest);
   const completeAndSave = useActiveWorkoutStore((s) => s.completeAndSave);
@@ -95,21 +98,25 @@ export default function WorkoutScreen() {
 
   // Bootstrap on mount.
   //
-  // Two responsibilities sequenced in a single effect so ordering is
-  // explicit (mount-reset before bootstrap):
   //   1. If the prior workout left status at 'done' (just saved and
   //      navigated away), clear it. Without this the bootstrap gate
-  //      below sees status === 'done' and skips startNewWorkout.
-  //   2. Decide whether to bootstrap a fresh workout. Reads from
-  //      getState() so the gate sees the post-reset slot, not a
-  //      stale closure value.
+  //      below sees status === 'done' and skips the open.
+  //   2. Check for a resumable orphan workout for the requested
+  //      templateId. If one exists, rehydrate the store from disk —
+  //      logged sets reappear and the user lands on the in-progress
+  //      set, not a fresh set 1.
+  //   3. Otherwise, start a new workout for the templateId.
+  //
+  // Reads via getState() so the gate sees the post-reset slot rather
+  // than a stale closure value.
   //
   // Deps: only `params.templateId` is reactive — the other reads
-  // (`router`, `resetToIdle`, `startNewWorkout`) hold stable refs
-  // (expo-router memoizes the router; zustand action refs are
-  // created once at store init). They're listed so exhaustive-deps
-  // stays honest without a disable; the effect still only re-fires
-  // when the templateId param changes (Fast Refresh aside).
+  // (`router`, `resetToIdle`, `startNewWorkout`, `resumeWorkout`)
+  // hold stable refs (expo-router memoizes the router; zustand
+  // action refs are created once at store init). They're listed
+  // so exhaustive-deps stays honest without a disable; the effect
+  // still only re-fires when the templateId param changes (Fast
+  // Refresh aside).
   useEffect(() => {
     const tid = params.templateId;
     if (typeof tid !== 'string' || tid.length === 0) {
@@ -121,14 +128,29 @@ export default function WorkoutScreen() {
     }
     const fresh = useActiveWorkoutStore.getState();
     if (
-      fresh.status === 'idle' ||
-      (fresh.templateId !== tid && fresh.status !== 'loading')
+      fresh.status !== 'idle' &&
+      !(fresh.templateId !== tid && fresh.status !== 'loading')
     ) {
-      void startNewWorkout(tid).catch(() => {
-        router.back();
-      });
+      return;
     }
-  }, [params.templateId, router, resetToIdle, startNewWorkout]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const orphan = await getMostRecentOrphan();
+        if (cancelled) return;
+        if (orphan && orphan.templateId === tid) {
+          await resumeWorkout(orphan);
+        } else {
+          await startNewWorkout(tid);
+        }
+      } catch {
+        if (!cancelled) router.back();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.templateId, router, resetToIdle, startNewWorkout, resumeWorkout]);
 
   // Tick driver for elapsed + rest. One interval per workout, cleared
   // on unmount. The dependency on `startedAt` re-arms cleanly if a
@@ -158,8 +180,14 @@ export default function WorkoutScreen() {
   // exactly once. Without this guard, the equality check `>= 0`
   // would keep the banner mounted permanently after the timer hit
   // zero (restEndsAt is still set in the store).
+  //
+  // Haptic fires inside this transition guard so it triggers exactly
+  // once per rest interval, even though the screen ticks `now` every
+  // second. The user may be looking away — Success notification is
+  // the right pattern (distinct from the routine impacts elsewhere).
   useEffect(() => {
     if (restEndsAt !== null && restRemaining === 0) {
+      haptics.success();
       skipRest();
     }
   }, [restEndsAt, restRemaining, skipRest]);
@@ -214,10 +242,12 @@ export default function WorkoutScreen() {
 
   const onRowLog = useCallback(async () => {
     if (displayedKg === null || displayedReps === null) return;
+    haptics.light();
     await logCurrentSet({ kg: displayedKg, reps: displayedReps });
   }, [displayedKg, displayedReps, logCurrentSet]);
 
   const onSave = useCallback(async () => {
+    haptics.medium();
     await completeAndSave();
     // Re-hydrate Today and Gym so the completed workout surfaces on
     // both tabs immediately (next-workout rotation, this-week dots,
@@ -238,11 +268,12 @@ export default function WorkoutScreen() {
       'End workout.',
       'Sets logged so far are kept.',
       [
-        { text: 'Keep going.', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'End.',
+          text: 'End',
           style: 'destructive',
           onPress: async () => {
+            haptics.medium();
             await abandon();
             router.back();
           },
@@ -274,10 +305,14 @@ export default function WorkoutScreen() {
   }
 
   if (status === 'done') {
+    // Done takeover centers "Done. 47 minutes." on the inset-aware
+    // available height — top AND bottom edges respected so the lockup
+    // visually sits on the screen's midline rather than drifting upward
+    // because the home-indicator territory bites into the bottom.
     return (
       <SafeAreaView
         style={{ flex: 1, backgroundColor: theme.colors.bg }}
-        edges={['top']}
+        edges={['top', 'bottom']}
       >
         <DoneTakeover durationSeconds={elapsedSeconds} onSave={onSave} />
       </SafeAreaView>

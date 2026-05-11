@@ -1,4 +1,5 @@
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Text, TextButton } from '../primitives';
 import { formatRest } from '../../utils/workout';
@@ -24,13 +25,18 @@ type RestTimerProps = {
  */
 export function RestTimer({ remainingSeconds, onSkip }: RestTimerProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  // Banner sits flush to the physical bottom; absorb the home-indicator
+  // inset into its own paddingBottom so the surface paints under the
+  // indicator while the countdown stays clear of it.
+  const bannerBottom = Math.max(insets.bottom + theme.spacing[2], theme.spacing[5]);
   return (
     <View
       style={{
         backgroundColor: theme.colors.surface,
         paddingHorizontal: theme.spacing[5],
         paddingTop: theme.spacing[3],
-        paddingBottom: theme.spacing[5],
+        paddingBottom: bannerBottom,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',

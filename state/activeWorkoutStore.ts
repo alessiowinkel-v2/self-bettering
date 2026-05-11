@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   getLastSetsForExerciseBeforeWorkout,
+  getSetsForWorkout,
   logSet,
   type SetRow,
 } from '../db/sets';
@@ -8,7 +9,9 @@ import {
   completeWorkout,
   getWorkoutTemplates,
   startWorkout,
+  type ResumableOrphan,
 } from '../db/workouts';
+import { haptics } from '../utils/haptics';
 import type { WorkoutTemplate } from './types';
 
 /**
@@ -78,6 +81,14 @@ type ActiveWorkoutState = {
   restEndsAt: number | null;
 
   startNewWorkout: (templateId: string) => Promise<void>;
+  /**
+   * Rehydrate the store from an existing orphan workout on disk. Same
+   * resulting state shape as startNewWorkout — exercises[] populated
+   * with prescription + lastSets + already-logged sets, currentExerciseIndex
+   * pointing at the in-progress exercise — but does NOT insert a new
+   * workout row (the orphan's row is reused as-is).
+   */
+  resumeWorkout: (orphan: ResumableOrphan) => Promise<void>;
   logCurrentSet: (input: { kg: number; reps: number }) => Promise<void>;
   skipRest: () => void;
   /**
@@ -173,6 +184,85 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
     });
   },
 
+  resumeWorkout: async (orphan) => {
+    set({ status: 'loading' });
+
+    const templates = await getWorkoutTemplates();
+    const template: WorkoutTemplate | undefined = templates.find(
+      (t) => t.id === orphan.templateId,
+    );
+    if (!template) {
+      // Template vanished between orphan capture and resume — fall
+      // back to idle so the screen can route back cleanly.
+      set(initialState);
+      throw new Error(
+        `[activeWorkout] resume: unknown template ${orphan.templateId}`,
+      );
+    }
+
+    // Pull each exercise's prior-workout sets and the already-logged
+    // sets for this workout in parallel.
+    const [lastSetsPerExercise, loggedSets] = await Promise.all([
+      Promise.all(
+        template.exercises.map((ex) =>
+          getLastSetsForExerciseBeforeWorkout({
+            exerciseName: ex.name,
+            currentWorkoutId: orphan.workoutId,
+          }),
+        ),
+      ),
+      getSetsForWorkout(orphan.workoutId),
+    ]);
+
+    // Group the logged sets by exercise name so we can hand each
+    // ExerciseProgress its slice in set_number order.
+    const loggedByExercise = new Map<string, LoggedSet[]>();
+    for (const s of loggedSets) {
+      if (s.kg === null || s.reps === null) continue;
+      const arr = loggedByExercise.get(s.exerciseName) ?? [];
+      arr.push({ setNumber: s.setNumber, kg: s.kg, reps: s.reps });
+      loggedByExercise.set(s.exerciseName, arr);
+    }
+    for (const arr of loggedByExercise.values()) {
+      arr.sort((a, b) => a.setNumber - b.setNumber);
+    }
+
+    const exercises: ReadonlyArray<ExerciseProgress> = template.exercises.map(
+      (ex, i) => ({
+        index: i,
+        name: ex.name,
+        setCount: ex.setCount,
+        repRange: ex.repRange,
+        lastSets: lastSetsPerExercise[i],
+        loggedSets: loggedByExercise.get(ex.name) ?? [],
+      }),
+    );
+
+    // Re-derive the in-progress exercise from the same rule the DB
+    // layer uses: first exercise whose logged count falls short of
+    // its prescription. Avoids trusting `orphan.currentExerciseName`
+    // in case the template's exercise order changed since the
+    // orphan was captured.
+    let currentExerciseIndex = exercises.length - 1;
+    for (let i = 0; i < exercises.length; i++) {
+      if (exercises[i].loggedSets.length < exercises[i].setCount) {
+        currentExerciseIndex = i;
+        break;
+      }
+    }
+
+    set({
+      status: 'active',
+      workoutId: orphan.workoutId,
+      templateId: orphan.templateId,
+      templateName: template.name,
+      startedAt: orphan.startedAt,
+      exercises,
+      currentExerciseIndex,
+      restEndsAt: null,
+    });
+  },
+
   logCurrentSet: async ({ kg, reps }) => {
     const state = get();
     if (state.status !== 'active' || state.workoutId === null) return;
@@ -225,6 +315,13 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       restEndsAt,
       status: isComplete ? 'done' : 'active',
     });
+
+    // Fire the workout-complete haptic on the active→done transition,
+    // not on every DoneTakeover render. Living in the store means any
+    // future surface (a watch companion, a widget) gets it for free.
+    // The row Log already fired light() at the screen — success() here
+    // is the additional confirmation that the workout itself ended.
+    if (isComplete) haptics.success();
   },
 
   skipRest: () => {

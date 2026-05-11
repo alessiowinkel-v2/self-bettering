@@ -1,7 +1,5 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Constants from 'expo-constants';
-import { File, Paths } from 'expo-file-system';
-import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import { Stack } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Alert, Switch, View } from 'react-native';
@@ -12,16 +10,16 @@ import {
   Screen,
   SectionHeader,
   Text,
-  TextButton,
 } from '../components/primitives';
-import { buildExportPayload } from '../db/export';
 import { wipeAllData } from '../db/wipe';
 import { useGymHomeStore } from '../state/gymHomeStore';
 import { useHabitsListStore } from '../state/habitsListStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { useTodayStore } from '../state/todayStore';
 import { useTheme, useThemeStore } from '../theme';
-import { todayIso } from '../utils/dateFormat';
+import { runExportFlow } from '../utils/export';
+import { haptics } from '../utils/haptics';
+import type { ThemeOverride } from '../theme';
 
 /**
  * Settings — stack route under root, reachable from Today's cog icon.
@@ -61,11 +59,50 @@ export default function SettingsScreen() {
   const setThemeOverride = useThemeStore((s) => s.setOverride);
 
   const morningCheckInTime = useSettingsStore((s) => s.morningCheckInTime);
-  const setMorningCheckInTime = useSettingsStore((s) => s.setMorningCheckInTime);
+  const setMorningCheckInTimeRaw = useSettingsStore((s) => s.setMorningCheckInTime);
   const eveningCheckInTime = useSettingsStore((s) => s.eveningCheckInTime);
-  const setEveningCheckInTime = useSettingsStore((s) => s.setEveningCheckInTime);
+  const setEveningCheckInTimeRaw = useSettingsStore((s) => s.setEveningCheckInTime);
   const restTimerAlerts = useSettingsStore((s) => s.restTimerAlerts);
-  const setRestTimerAlerts = useSettingsStore((s) => s.setRestTimerAlerts);
+  const setRestTimerAlertsRaw = useSettingsStore((s) => s.setRestTimerAlerts);
+
+  // Haptic-wrapped commits. Theme tap, switch toggle, and the
+  // null<->time transitions on check-in rows each fire light() — small,
+  // deliberate state changes. Scroll-ticks inside the iOS time picker
+  // are NOT haptic'd: the spinner has its own native tactile feel and
+  // layering our own light() on every tick during a scroll would read
+  // as buzzing noise. Only the enablement (null → first value) and
+  // disablement (any → null, via "Turn off.") fire.
+  const onChangeTheme = useCallback(
+    (next: ThemeOverride) => {
+      haptics.light();
+      setThemeOverride(next);
+    },
+    [setThemeOverride],
+  );
+
+  const onChangeMorning = useCallback(
+    (next: string | null) => {
+      if ((morningCheckInTime === null) !== (next === null)) haptics.light();
+      setMorningCheckInTimeRaw(next);
+    },
+    [morningCheckInTime, setMorningCheckInTimeRaw],
+  );
+
+  const onChangeEvening = useCallback(
+    (next: string | null) => {
+      if ((eveningCheckInTime === null) !== (next === null)) haptics.light();
+      setEveningCheckInTimeRaw(next);
+    },
+    [eveningCheckInTime, setEveningCheckInTimeRaw],
+  );
+
+  const onToggleRestTimerAlerts = useCallback(
+    (next: boolean) => {
+      haptics.light();
+      setRestTimerAlertsRaw(next);
+    },
+    [setRestTimerAlertsRaw],
+  );
 
   const version = useMemo(() => {
     return Constants.expoConfig?.version ?? '0.0.0';
@@ -78,29 +115,7 @@ export default function SettingsScreen() {
 
   const onExport = useCallback(async () => {
     try {
-      const payload = await buildExportPayload();
-      const json = JSON.stringify(payload, null, 2);
-      const filename = `lumen-export-${todayIso()}.json`;
-      // documentDirectory is durable and visible to the share sheet.
-      // Cache would also work, but documents reads as the right place
-      // for the user to consciously route somewhere else.
-      const file = new File(Paths.document, filename);
-      if (file.exists) {
-        file.delete();
-      }
-      file.create();
-      file.write(json);
-
-      const available = await isAvailableAsync();
-      if (!available) {
-        Alert.alert('Sharing not available.', `Saved to ${file.uri}`);
-        return;
-      }
-      await shareAsync(file.uri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Lumen export',
-        UTI: 'public.json',
-      });
+      await runExportFlow();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       Alert.alert('Could not export.', message);
@@ -120,6 +135,12 @@ export default function SettingsScreen() {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
+            // Warning is the one non-Success notification haptic in the
+            // app — reserved for irreversible actions. Fires the moment
+            // the user commits the destructive choice, before the wipe
+            // runs, so the device confirms the tap was received even if
+            // the SQLite work takes a beat.
+            haptics.warning();
             try {
               await wipeAllData();
             } catch (e) {
@@ -146,7 +167,7 @@ export default function SettingsScreen() {
   }, []);
 
   return (
-    <Screen edges={[]}>
+    <Screen edges={['bottom']}>
       <Stack.Screen options={STACK_OPTIONS} />
 
       <View style={{ marginTop: titleTopPad, marginBottom: theme.spacing[5] }}>
@@ -160,7 +181,7 @@ export default function SettingsScreen() {
           index={0}
           left={<Text variant="body">Theme</Text>}
           right={
-            <ThemeChoice current={themeOverride} onChange={setThemeOverride} />
+            <ThemeChoice current={themeOverride} onChange={onChangeTheme} />
           }
         />
       </ListGroup>
@@ -172,14 +193,14 @@ export default function SettingsScreen() {
           index={0}
           title="Morning check-in"
           value={morningCheckInTime}
-          onChange={setMorningCheckInTime}
+          onChange={onChangeMorning}
           accessibilityLabel="Morning check-in time"
         />
         <CheckInRow
           index={1}
           title="Evening check-in"
           value={eveningCheckInTime}
-          onChange={setEveningCheckInTime}
+          onChange={onChangeEvening}
           accessibilityLabel="Evening check-in time"
         />
         <ListRow
@@ -188,7 +209,7 @@ export default function SettingsScreen() {
           right={
             <Switch
               value={restTimerAlerts}
-              onValueChange={setRestTimerAlerts}
+              onValueChange={onToggleRestTimerAlerts}
               trackColor={{
                 false: theme.colors.surfaceElev,
                 true: theme.colors.accent,

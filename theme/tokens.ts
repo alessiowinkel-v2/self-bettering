@@ -8,6 +8,7 @@ export type ColorRole =
   | 'textSecondary'
   | 'textTertiary'
   | 'accent'
+  | 'accentBright'
   | 'destructive'
   | 'divider';
 
@@ -21,6 +22,12 @@ export const colorsDark: ColorPalette = {
   textSecondary: '#8C857A',
   textTertiary: '#5A554E',
   accent: '#E8A24C',
+  // The peak color of the streak-number increment pulse on Today.
+  // Same hue and saturation as accent, lightness lifted ~12% in HSL —
+  // computed from accent (#E8A24C, HSL 33°/78%/60%) at L=72%. Read
+  // as "the amber, brighter" not "a different amber." Tune the lift
+  // on-device if the pulse reads imperceptible or too loud.
+  accentBright: '#EFBE80',
   // Single destructive accent. Reserved for "Clear all data." and
   // "Turn off." style negations — chromatic enough to read as a
   // distinct signal, muted enough to sit next to the amber accent
@@ -38,6 +45,9 @@ export const colorsLight: ColorPalette = {
   textSecondary: '#6E665A',
   textTertiary: '#9C9486',
   accent: '#C9802A',
+  // Peak pulse color, light mode. Same construction as dark — accent
+  // at L=59% (lifted ~11% from accent's L=48%) on a cream background.
+  accentBright: '#DB9C52',
   destructive: '#9E3B1F',
   divider: '#E2DCD0',
 };

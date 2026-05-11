@@ -1,9 +1,10 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { Screen, SectionHeader } from '../../components/primitives';
 import {
   AllHeldCard,
+  BackupReminderCard,
   EmptyToday,
   HabitCard,
   NoJournalYetCard,
@@ -16,13 +17,17 @@ import {
 import { JournalPreviewCard } from '../../components/journal';
 import { NextWorkoutCard } from '../../components/workout';
 import { useTheme } from '../../theme';
+import { useBackupReminderStore } from '../../state/backupReminderStore';
 import {
   selectHasJournalToday,
   selectTodayShapeKind,
   useTodayStore,
 } from '../../state/todayStore';
 import { abbreviateHabitName } from '../../utils/abbreviateHabitName';
+import { shouldShowReminder } from '../../utils/backupReminder';
 import { todayIso } from '../../utils/dateFormat';
+import { runExportFlow } from '../../utils/export';
+import { haptics } from '../../utils/haptics';
 
 /**
  * Today screen. Canonical vertical order from the design PDF:
@@ -113,7 +118,20 @@ export default function TodayScreen() {
       habits.map((habit) => {
         const status = todayStatus.get(habit.id) ?? null;
         const streakThroughYesterday = streaksThroughYesterday[habit.id] ?? 0;
-        return { habit, status, streakThroughYesterday };
+        // displayStreak reflects today's status live so the card's
+        // number ticks N → N+1 on Held (AnimatedStreakNumber animates
+        // the transition) and resets to 0 on Slipped (no animation per
+        // spec — the card collapses to SLIPPED anyway). The chips row
+        // intentionally reads streakThroughYesterday so it stays put;
+        // the chips are a glanceable summary, the card is the surface
+        // where the commit happened.
+        const displayStreak =
+          status === 'held'
+            ? streakThroughYesterday + 1
+            : status === 'slipped'
+              ? 0
+              : streakThroughYesterday;
+        return { habit, status, streakThroughYesterday, displayStreak };
       }),
     [habits, todayStatus, streaksThroughYesterday],
   );
@@ -165,11 +183,53 @@ export default function TodayScreen() {
     </View>
   );
 
+  // Backup reminder card. Sits below the TodayHeader (not above) so the
+  // "Today." title stays anchored just under the safe-area inset where
+  // the cog sits — rendering the card above would push the title down
+  // and decouple it from the cog's absolute position. foregroundTick is
+  // a no-op subscription that re-renders this component on each
+  // background→active transition, letting shouldShowReminder re-evaluate
+  // with a fresh `new Date()` without relying on focus-effects alone.
+  const lastExportedAt = useBackupReminderStore((s) => s.lastExportedAt);
+  const lastSnoozedAt = useBackupReminderStore((s) => s.lastSnoozedAt);
+  // foregroundTick is subscribed-but-unused: the re-render IS the
+  // signal. Reading the value into a local keeps the subscription
+  // legible (vs. an orphan expression statement) and feeds it into
+  // useMemo's deps so the reminder visibility re-derives on each
+  // background→active transition.
+  const foregroundTick = useBackupReminderStore((s) => s.foregroundTick);
+  const showBackupReminder = useMemo(
+    () => shouldShowReminder(lastExportedAt, lastSnoozedAt),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lastExportedAt, lastSnoozedAt, foregroundTick],
+  );
+
+  const onBackupExport = useCallback(async () => {
+    try {
+      await runExportFlow();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      Alert.alert('Could not export.', message);
+    }
+  }, []);
+
+  const onBackupSnooze = useCallback(() => {
+    haptics.light();
+    useBackupReminderStore.getState().recordSnooze();
+  }, []);
+
+  const reminderElement = showBackupReminder ? (
+    <View style={{ marginTop: theme.spacing[5] }}>
+      <BackupReminderCard onExport={onBackupExport} onSnooze={onBackupSnooze} />
+    </View>
+  ) : null;
+
   if (shapeKind === 'empty') {
     return (
       <Screen>
         {cogElement}
         <TodayHeader />
+        {reminderElement}
         <EmptyToday onAddHabit={() => {}} />
       </Screen>
     );
@@ -180,6 +240,7 @@ export default function TodayScreen() {
       <Screen>
         {cogElement}
         <TodayHeader />
+        {reminderElement}
         <TodayIsDone />
         <SectionHeader>Streaks</SectionHeader>
         <StreaksRow items={streakItems} />
@@ -192,6 +253,7 @@ export default function TodayScreen() {
     <Screen>
       {cogElement}
       <TodayHeader />
+      {reminderElement}
 
       <View style={{ marginTop: theme.spacing[5], gap: theme.spacing[3] }}>
         {allHeld ? (
@@ -201,10 +263,16 @@ export default function TodayScreen() {
             <HabitCard
               key={row.habit.id}
               name={row.habit.name}
-              streak={row.streakThroughYesterday}
+              streak={row.displayStreak}
               status={row.status}
-              onHeld={() => logHabit(row.habit.id, 'held')}
-              onSlipped={() => logHabit(row.habit.id, 'slipped')}
+              onHeld={() => {
+                haptics.light();
+                void logHabit(row.habit.id, 'held');
+              }}
+              onSlipped={() => {
+                haptics.light();
+                void logHabit(row.habit.id, 'slipped');
+              }}
               onPress={() => onOpenHabit(row.habit.id)}
             />
           ))

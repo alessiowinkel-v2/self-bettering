@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Delete } from 'lucide-react-native';
 import { useTheme } from '../../theme';
 import { Text, TextButton } from '../primitives';
@@ -53,6 +54,13 @@ export function NumericPad({
   onLog,
 }: NumericPadProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  // Pad sits flush to the physical bottom; its own paddingBottom absorbs
+  // the home-indicator inset so the surface paints under the indicator
+  // while the last key row stays clear of it. Max with the design's
+  // spacing[6] baseline so devices without an inset keep the original
+  // breathing room.
+  const padBottom = Math.max(insets.bottom + theme.spacing[2], theme.spacing[6]);
   // Seed the buffer with the formatted value if there is one. Empty
   // string keeps "" so the user can type fresh without backspacing
   // through the placeholder — but if they leave it empty and tap Log,
@@ -111,7 +119,7 @@ export function NumericPad({
         backgroundColor: theme.colors.surface,
         paddingHorizontal: theme.spacing[4],
         paddingTop: theme.spacing[4],
-        paddingBottom: theme.spacing[6],
+        paddingBottom: padBottom,
       }}
     >
       {/* Top row: big display + last pill */}

@@ -211,7 +211,7 @@ export default function JournalEditorScreen() {
 
   if (hydrateError !== null) {
     return (
-      <Screen edges={[]}>
+      <Screen edges={['bottom']}>
         <Stack.Screen options={STACK_OPTIONS} />
         <View
           style={{
@@ -234,9 +234,9 @@ export default function JournalEditorScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing[5] }}>
             <TextButton
-              label="Try again."
+              label="Try again"
               onPress={retryHydrate}
-              accessibilityLabel="Try again."
+              accessibilityLabel="Try again"
             />
           </View>
         </View>
@@ -246,7 +246,7 @@ export default function JournalEditorScreen() {
 
   if (!hydrated) {
     return (
-      <Screen edges={[]}>
+      <Screen edges={['bottom']}>
         <Stack.Screen options={STACK_OPTIONS} />
       </Screen>
     );
@@ -254,7 +254,7 @@ export default function JournalEditorScreen() {
 
   if (date === null) {
     return (
-      <Screen edges={[]}>
+      <Screen edges={['bottom']}>
         <Stack.Screen options={STACK_OPTIONS} />
         <View style={{ marginTop: titleTopPad }}>
           <Text variant="displayItalic" tone="secondary">
@@ -266,7 +266,7 @@ export default function JournalEditorScreen() {
   }
 
   return (
-    <Screen edges={[]}>
+    <Screen edges={['bottom']}>
       <Stack.Screen options={STACK_OPTIONS} />
 
       <View
