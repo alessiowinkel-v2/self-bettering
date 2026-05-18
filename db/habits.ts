@@ -13,6 +13,7 @@ type HabitRow = {
   created_on: string;
   paused_at: string | null;
   deleted_at: string | null;
+  reminder_time: string | null;
 };
 
 function rowToHabit(row: HabitRow): Habit {
@@ -31,7 +32,7 @@ function rowToHabit(row: HabitRow): Habit {
 export async function getActiveHabits(): Promise<ReadonlyArray<Habit>> {
   const db = await getDB();
   const rows = await db.getAllAsync<HabitRow>(
-    `SELECT id, name, created_on, paused_at, deleted_at
+    `SELECT id, name, created_on, paused_at, deleted_at, reminder_time
        FROM habits
       WHERE paused_at IS NULL AND deleted_at IS NULL
       ORDER BY sort_order ASC, created_on ASC, id ASC;`
@@ -43,7 +44,7 @@ export async function getActiveHabits(): Promise<ReadonlyArray<Habit>> {
 export async function getPausedHabits(): Promise<ReadonlyArray<Habit>> {
   const db = await getDB();
   const rows = await db.getAllAsync<HabitRow>(
-    `SELECT id, name, created_on, paused_at, deleted_at
+    `SELECT id, name, created_on, paused_at, deleted_at, reminder_time
        FROM habits
       WHERE paused_at IS NOT NULL AND deleted_at IS NULL
       ORDER BY sort_order ASC, created_on ASC, id ASC;`
@@ -55,7 +56,7 @@ export async function getPausedHabits(): Promise<ReadonlyArray<Habit>> {
 export async function getArchivedHabits(): Promise<ReadonlyArray<Habit>> {
   const db = await getDB();
   const rows = await db.getAllAsync<HabitRow>(
-    `SELECT id, name, created_on, paused_at, deleted_at
+    `SELECT id, name, created_on, paused_at, deleted_at, reminder_time
        FROM habits
       WHERE deleted_at IS NOT NULL
       ORDER BY sort_order ASC, created_on ASC, id ASC;`
@@ -75,10 +76,11 @@ export async function getHabitWithLifecycle(id: string): Promise<{
   habit: Habit;
   pausedAt: string | null;
   deletedAt: string | null;
+  reminderTime: string | null;
 } | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<HabitRow>(
-    `SELECT id, name, created_on, paused_at, deleted_at
+    `SELECT id, name, created_on, paused_at, deleted_at, reminder_time
        FROM habits
       WHERE id = ?;`,
     [id]
@@ -88,6 +90,7 @@ export async function getHabitWithLifecycle(id: string): Promise<{
     habit: rowToHabit(row),
     pausedAt: row.paused_at,
     deletedAt: row.deleted_at,
+    reminderTime: row.reminder_time,
   };
 }
 
@@ -131,6 +134,52 @@ export async function setHabitCreatedOn(input: {
     `UPDATE habits SET created_on = ? WHERE id = ?;`,
     [input.createdOn, input.id]
   );
+}
+
+/**
+ * Set or clear a habit's daily reminder time. Pass an "HH:mm" 24h
+ * string to enable, or null to turn the reminder off. The value feeds
+ * getActiveHabitReminders, which the notification reconcile reads to
+ * schedule per-habit local notifications. Streak math is unaffected.
+ */
+export async function setHabitReminderTime(input: {
+  id: string;
+  reminderTime: string | null;
+}): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE habits SET reminder_time = ? WHERE id = ?;`,
+    [input.reminderTime, input.id]
+  );
+}
+
+/**
+ * Active habits that have a reminder set — not paused, not deleted,
+ * reminder_time non-null. Ordered consistently with getActiveHabits.
+ * Feeds the notification reconcile, which only schedules reminders for
+ * active habits; paused/archived habits never fire.
+ */
+export async function getActiveHabitReminders(): Promise<
+  ReadonlyArray<{ habitId: string; name: string; time: string }>
+> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{
+    id: string;
+    name: string;
+    reminder_time: string;
+  }>(
+    `SELECT id, name, reminder_time
+       FROM habits
+      WHERE paused_at IS NULL
+        AND deleted_at IS NULL
+        AND reminder_time IS NOT NULL
+      ORDER BY sort_order ASC, created_on ASC, id ASC;`
+  );
+  return rows.map((row) => ({
+    habitId: row.id,
+    name: row.name,
+    time: row.reminder_time,
+  }));
 }
 
 /** Mark a habit paused. The timestamp doubles as the "paused since" date. */

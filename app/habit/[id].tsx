@@ -6,7 +6,7 @@ import {
   useRouter,
 } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import {
   Screen,
   Text,
@@ -19,15 +19,21 @@ import {
   Heatmap90,
   StatusLabel,
 } from '../../components/habit';
+import { CheckInRow } from '../../components/settings';
 import {
   getBestStreak,
   getLogsForHabitInRange,
   getMostRecentSlipDate,
   getStreakForHabit,
 } from '../../db/habitLogs';
-import { getHabitWithLifecycle } from '../../db/habits';
-import { useHabitsListStore } from '../../state/habitsListStore';
+import { getHabitWithLifecycle, setHabitReminderTime } from '../../db/habits';
+import {
+  syncHabitRemindersFromDb,
+  useHabitsListStore,
+} from '../../state/habitsListStore';
 import { useTheme } from '../../theme';
+import { ensurePermission } from '../../utils/notifications';
+import { haptics } from '../../utils/haptics';
 import {
   buildWeekDots,
   getHabitLifecycleVariant,
@@ -54,6 +60,8 @@ type DetailSnapshot = {
   habit: Habit;
   pausedAt: string | null;
   deletedAt: string | null;
+  /** Per-habit daily reminder, "HH:mm" or null when off. */
+  reminderTime: string | null;
   /** Streak through TODAY (live). Today's slip shows 0 immediately. */
   streak: number;
   best: number;
@@ -92,6 +100,15 @@ export default function HabitDetailScreen() {
   const id = typeof params.id === 'string' ? params.id : null;
 
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+
+  // The editable reminder time lives in its own state, kept out of the
+  // snapshot. The snapshot holds read-only derived data (streak, logs,
+  // variant); folding the one editable field into it meant the
+  // optimistic update spread a stale snapshot and a concurrent refresh()
+  // could clobber the pick. Seeded once from the DB at mount — only this
+  // screen edits a habit's reminder, so it never needs re-seeding.
+  const [reminderValue, setReminderValue] = useState<string | null>(null);
+
   // Shared across the mount-effect and refresh() so a mutation that
   // resolves after unmount can't fire setState on a torn-down tree.
   //
@@ -102,6 +119,15 @@ export default function HabitDetailScreen() {
   // stale snapshot. Acceptable at this app's scale (one user, push
   // navigation); revisit with an epoch counter if it surfaces.
   const cancelledRef = useRef(false);
+
+  // Reminder commit is debounced — CheckInRow's spinner fires onChange
+  // per wheel tick. reminderTimer holds the pending commit; the mount
+  // effect seeds latestReminderRef, which carries the picked value into
+  // the debounced tail and is the synchronous source of truth for the
+  // null<->time transition (a ref updates before React commits, so two
+  // fast ticks can't both read the pre-edit value).
+  const reminderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestReminderRef = useRef<string | null>(null);
 
   const fetchSnapshot = useCallback(async (
     habitId: string
@@ -142,6 +168,7 @@ export default function HabitDetailScreen() {
       habit: habitWithLifecycle.habit,
       pausedAt: habitWithLifecycle.pausedAt,
       deletedAt: habitWithLifecycle.deletedAt,
+      reminderTime: habitWithLifecycle.reminderTime,
       streak,
       best,
       mostRecentSlipDate,
@@ -166,6 +193,13 @@ export default function HabitDetailScreen() {
       try {
         const snapshot = await fetchSnapshot(id);
         if (cancelledRef.current) return;
+        if (snapshot !== null) {
+          // Seed the editable reminder state + the ref the debounced
+          // commit reads. Done here, not in refresh(), so a focus
+          // refresh can never revert an in-progress edit.
+          setReminderValue(snapshot.reminderTime);
+          latestReminderRef.current = snapshot.reminderTime;
+        }
         setState(
           snapshot === null ? { kind: 'not-found' } : { kind: 'ready', snapshot }
         );
@@ -228,6 +262,74 @@ export default function HabitDetailScreen() {
     router.push({ pathname: '/habit/set-streak', params: { id } });
   }, [id, router]);
 
+  // The debounced commit: write the latest picked value to SQLite, then
+  // reconcile this habit's notification. Reads latestReminderRef so it
+  // is not pinned to a stale render's value.
+  const commitReminder = useCallback(() => {
+    if (id === null) return;
+    void (async () => {
+      await setHabitReminderTime({
+        id,
+        reminderTime: latestReminderRef.current,
+      });
+      await syncHabitRemindersFromDb();
+    })();
+  }, [id]);
+
+  const scheduleReminderCommit = useCallback(() => {
+    if (reminderTimer.current) clearTimeout(reminderTimer.current);
+    reminderTimer.current = setTimeout(() => {
+      reminderTimer.current = null;
+      commitReminder();
+    }, 400);
+  }, [commitReminder]);
+
+  // Flush a pending reminder commit on unmount so a change made right
+  // before navigating away still reaches SQLite.
+  useEffect(
+    () => () => {
+      if (reminderTimer.current) {
+        clearTimeout(reminderTimer.current);
+        reminderTimer.current = null;
+        commitReminder();
+      }
+    },
+    [commitReminder],
+  );
+
+  // Permission is requested lazily — only when the reminder is turned
+  // on. A denial keeps the time saved; the reconcile then no-ops and
+  // the alert points to iOS Settings. The trailing commit covers the
+  // case where the prompt outlasts the debounced commit.
+  const onEnableReminder = useCallback(async () => {
+    const granted = await ensurePermission();
+    if (!granted) {
+      Alert.alert(
+        'Notifications are off.',
+        'Turn them on for Lumen in iOS Settings to get habit reminders.',
+      );
+    }
+    commitReminder();
+  }, [commitReminder]);
+
+  const onChangeReminder = useCallback(
+    (next: string | null) => {
+      // Transition is read off the ref, not React state — the ref
+      // updates synchronously, so two fast spinner ticks before a
+      // render commits can't both see the pre-edit value and double-
+      // fire onEnableReminder.
+      const prev = latestReminderRef.current;
+      const turnedOn = prev === null && next !== null;
+      const turnedOff = prev !== null && next === null;
+      if (turnedOn || turnedOff) haptics.light();
+      latestReminderRef.current = next;
+      setReminderValue(next);
+      if (turnedOn) void onEnableReminder();
+      scheduleReminderCommit();
+    },
+    [onEnableReminder, scheduleReminderCommit],
+  );
+
   // Pad the top of the body so the title clears the system back
   // chevron under headerTransparent. Header height + a single spacing
   // step lands the Fraunces title at the same vertical rhythm as
@@ -264,6 +366,13 @@ export default function HabitDetailScreen() {
   const isDayOne = s.variant === 'day-one';
   const isArchived = s.variant === 'archived';
   const isPaused = s.variant === 'paused';
+
+  // Reminder row shows only for active habits — a reminder on a paused
+  // or archived habit would not schedule (getActiveHabitReminders
+  // excludes them), so the control would silently do nothing. The
+  // stored reminder_time is left intact across a pause and reschedules
+  // on resume.
+  const showReminder = !isPaused && !isArchived;
 
   // Calendar hides on day-one only; just-slipped, paused, and
   // archived all keep the calendar visible so the run history reads.
@@ -331,6 +440,18 @@ export default function HabitDetailScreen() {
             logs={s.logsForWindow}
             today={today}
             createdOn={s.habit.createdOn}
+          />
+        </View>
+      ) : null}
+
+      {showReminder ? (
+        <View style={{ marginTop: theme.spacing[7] }}>
+          <CheckInRow
+            index={0}
+            title="Reminder"
+            value={reminderValue}
+            onChange={onChangeReminder}
+            accessibilityLabel={`Daily reminder for ${s.habit.name}`}
           />
         </View>
       ) : null}

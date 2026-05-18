@@ -18,11 +18,13 @@ import { createJSONStorage, persist } from 'zustand/middleware';
  *     sheet reads this to decide whether to fire a haptic + sound at
  *     completion.
  *
- * Persisted via AsyncStorage. No boot-gate dependency: Settings is a
- * tab destination read post-boot, and a one-frame flicker through the
- * in-memory defaults during the first AsyncStorage resolve is
- * acceptable. Phase 4's notification scheduler can add a hydration
- * gate when it arrives with a real boot-time consumer.
+ * Persisted via AsyncStorage. Rendering is not gated on hydration — a
+ * one-frame flicker through the in-memory defaults on Settings is
+ * acceptable. But `_hasHydrated` IS exposed: the root layout's
+ * boot-time notification sync must wait for the persisted check-in
+ * times, not act on the in-memory `null` defaults (which would cancel
+ * every reminder on each cold start). It flips true once via
+ * `onRehydrateStorage`, mirroring the theme store's pattern.
  */
 
 export type CheckInTime = string | null;
@@ -31,9 +33,11 @@ type SettingsStoreState = {
   morningCheckInTime: CheckInTime;
   eveningCheckInTime: CheckInTime;
   restTimerAlerts: boolean;
+  _hasHydrated: boolean;
   setMorningCheckInTime: (next: CheckInTime) => void;
   setEveningCheckInTime: (next: CheckInTime) => void;
   setRestTimerAlerts: (next: boolean) => void;
+  _setHasHydrated: (value: boolean) => void;
 };
 
 export const useSettingsStore = create<SettingsStoreState>()(
@@ -42,9 +46,11 @@ export const useSettingsStore = create<SettingsStoreState>()(
       morningCheckInTime: null,
       eveningCheckInTime: null,
       restTimerAlerts: true,
+      _hasHydrated: false,
       setMorningCheckInTime: (next) => set({ morningCheckInTime: next }),
       setEveningCheckInTime: (next) => set({ eveningCheckInTime: next }),
       setRestTimerAlerts: (next) => set({ restTimerAlerts: next }),
+      _setHasHydrated: (value) => set({ _hasHydrated: value }),
     }),
     {
       name: 'lumen.settings',
@@ -54,6 +60,9 @@ export const useSettingsStore = create<SettingsStoreState>()(
         eveningCheckInTime: state.eveningCheckInTime,
         restTimerAlerts: state.restTimerAlerts,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?._setHasHydrated(true);
+      },
     },
   ),
 );

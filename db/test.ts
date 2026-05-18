@@ -6,7 +6,10 @@ import {
 } from './habitLogs';
 import {
   createHabit,
+  getActiveHabitReminders,
   getActiveHabits,
+  getHabitWithLifecycle,
+  setHabitReminderTime,
 } from './habits';
 import { getJournalEntryForDate, upsertJournalEntry } from './journal';
 import { runMigrations } from './migrate';
@@ -337,6 +340,47 @@ export async function runDbTests(): Promise<{
       });
       const all = await getWorkoutTemplates();
       await assert(all.some((t) => t.id === 'wt-test'), 'Inserted template should be readable.');
+    })
+  );
+
+  // Migration 0005: reminder_time column exists, defaults to NULL, and
+  // accepts an "HH:mm" value. setHabitReminderTime round-trips through
+  // getHabitWithLifecycle; getActiveHabitReminders only reports habits
+  // with a non-null time.
+  results.push(
+    await runOne('reminder_time defaults NULL and round-trips an HH:mm value', async () => {
+      await seedDev('default');
+      const habits = await getActiveHabits();
+      const habit = habits[0];
+
+      // Fresh habits have no reminder.
+      const before = await getHabitWithLifecycle(habit.id);
+      await assert(before !== null, 'Habit should exist.');
+      await assertEqual(before!.reminderTime, null, 'reminder_time defaults to NULL.');
+      const noneBefore = await getActiveHabitReminders();
+      await assert(
+        !noneBefore.some((r) => r.habitId === habit.id),
+        'Habit with no reminder should not appear in active reminders.'
+      );
+
+      // Set a time, confirm it round-trips.
+      await setHabitReminderTime({ id: habit.id, reminderTime: '08:30' });
+      const after = await getHabitWithLifecycle(habit.id);
+      await assertEqual(after!.reminderTime, '08:30', 'reminder_time stores the HH:mm value.');
+      const reminders = await getActiveHabitReminders();
+      const target = reminders.find((r) => r.habitId === habit.id);
+      await assert(target !== undefined, 'Habit with a reminder should appear in active reminders.');
+      await assertEqual(target!.time, '08:30', 'getActiveHabitReminders reports the set time.');
+
+      // Clear it, confirm it returns to NULL.
+      await setHabitReminderTime({ id: habit.id, reminderTime: null });
+      const cleared = await getHabitWithLifecycle(habit.id);
+      await assertEqual(cleared!.reminderTime, null, 'Clearing sets reminder_time back to NULL.');
+      const noneAfter = await getActiveHabitReminders();
+      await assert(
+        !noneAfter.some((r) => r.habitId === habit.id),
+        'Cleared reminder drops out of active reminders.'
+      );
     })
   );
 

@@ -1,7 +1,7 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Constants from 'expo-constants';
 import { Stack } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import { CheckInRow, ThemeChoice } from '../components/settings';
 import {
@@ -19,6 +19,7 @@ import { useTodayStore } from '../state/todayStore';
 import { useTheme, useThemeStore } from '../theme';
 import { runExportFlow } from '../utils/export';
 import { haptics } from '../utils/haptics';
+import { ensurePermission, syncCheckInNotifications } from '../utils/notifications';
 import type { ThemeOverride } from '../theme';
 
 /**
@@ -27,8 +28,10 @@ import type { ThemeOverride } from '../theme';
  * Sections (Fraunces section heads, rows below):
  *   1. Appearance — theme selector (always-visible three-button row).
  *   2. Notifications — morning check-in, evening check-in, rest timer
- *      alerts switch. Phase 3e ships the UI; Phase 4 wires the actual
- *      scheduling.
+ *      alerts switch. The two check-in times schedule daily local
+ *      notifications via `utils/notifications`: enabling one requests
+ *      OS permission, and any change reconciles the schedule (debounced
+ *      against the picker's per-tick onChange).
  *   3. Data — Export to JSON, Clear all data (destructive). Import is
  *      omitted entirely until Phase 4 — no disabled-row stub.
  *   4. About — Version row. No credit line.
@@ -80,20 +83,87 @@ export default function SettingsScreen() {
     [setThemeOverride],
   );
 
+  // Notification reconcile is debounced. The CheckInRow spinner fires
+  // onChange on every wheel tick; a cancel+reschedule per tick would
+  // churn the OS scheduler and race to an unpredictable end state. We
+  // reconcile 400ms after the last change instead — last value wins.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const runSync = useCallback(() => {
+    const { morningCheckInTime: m, eveningCheckInTime: e } =
+      useSettingsStore.getState();
+    void syncCheckInNotifications(m, e);
+  }, []);
+
+  const scheduleSync = useCallback(() => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      syncTimer.current = null;
+      runSync();
+    }, 400);
+  }, [runSync]);
+
+  // Flush a pending reconcile on unmount so a change made right before
+  // leaving Settings still takes effect without waiting for next boot.
+  useEffect(
+    () => () => {
+      if (syncTimer.current) {
+        clearTimeout(syncTimer.current);
+        syncTimer.current = null;
+        runSync();
+      }
+    },
+    [runSync],
+  );
+
+  // Permission is requested lazily — only when a reminder is turned on
+  // (null -> time). A denial keeps the time saved; the schedule sync
+  // then no-ops silently, and the alert points the user to iOS Settings.
+  //
+  // The prompt can outlast the debounced sync, which would then run
+  // against a still-undetermined status and schedule nothing — so
+  // reconcile once more here, after permission has settled.
+  const requestCheckInPermission = useCallback(async () => {
+    const granted = await ensurePermission();
+    if (!granted) {
+      Alert.alert(
+        'Notifications are off.',
+        'Turn them on for Lumen in iOS Settings to get check-in reminders.',
+      );
+    }
+    runSync();
+  }, [runSync]);
+
   const onChangeMorning = useCallback(
     (next: string | null) => {
+      const turnedOn = morningCheckInTime === null && next !== null;
       if ((morningCheckInTime === null) !== (next === null)) haptics.light();
       setMorningCheckInTimeRaw(next);
+      if (turnedOn) void requestCheckInPermission();
+      scheduleSync();
     },
-    [morningCheckInTime, setMorningCheckInTimeRaw],
+    [
+      morningCheckInTime,
+      setMorningCheckInTimeRaw,
+      requestCheckInPermission,
+      scheduleSync,
+    ],
   );
 
   const onChangeEvening = useCallback(
     (next: string | null) => {
+      const turnedOn = eveningCheckInTime === null && next !== null;
       if ((eveningCheckInTime === null) !== (next === null)) haptics.light();
       setEveningCheckInTimeRaw(next);
+      if (turnedOn) void requestCheckInPermission();
+      scheduleSync();
     },
-    [eveningCheckInTime, setEveningCheckInTimeRaw],
+    [
+      eveningCheckInTime,
+      setEveningCheckInTimeRaw,
+      requestCheckInPermission,
+      scheduleSync,
+    ],
   );
 
   const onToggleRestTimerAlerts = useCallback(

@@ -17,9 +17,12 @@ type CheckInRowProps = {
 };
 
 /**
- * One reminder row on Settings. Right slot shows either the current
- * "HH:mm" or a muted "Off" caption — tapping the row expands an inline
- * time picker below.
+ * A reminder row. Right slot shows either the current "HH:mm" or a
+ * muted "Off" caption — tapping the row expands an inline time picker
+ * below. Used by Settings (the two app-wide check-ins) and by Habit
+ * Detail (a single habit's daily reminder); it is a generic time-or-off
+ * row and holds no notification logic of its own — the caller's
+ * onChange owns scheduling.
  *
  * Off-UX (Phase 3e Note C):
  *   - Currently off (null): tap to expand picker. The first time value
@@ -33,9 +36,6 @@ type CheckInRowProps = {
  * "Off" lives only as a display value on the row's right slot — never
  * as a TextButton at the same level as the time. The expansion
  * picker carries the negation control.
- *
- * Phase 4 will own actual notification scheduling against these values;
- * Phase 3e is configuration-only.
  */
 export function CheckInRow({
   index,

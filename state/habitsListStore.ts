@@ -12,13 +12,36 @@ import {
   restoreHabit as dbRestoreHabit,
   resumeHabit as dbResumeHabit,
   setHabitCreatedOn as dbSetHabitCreatedOn,
+  getActiveHabitReminders,
   getActiveHabits,
   getArchivedHabits,
   getPausedHabits,
 } from '../db/habits';
 import { todayIso, yesterdayIso } from '../utils/dateFormat';
+import { syncHabitReminders } from '../utils/notifications';
 import { useTodayStore } from './todayStore';
 import type { Habit, HabitStatus } from './types';
+
+/**
+ * Re-reconcile per-habit reminder notifications against the DB. Reads
+ * the active habits that have a reminder time and hands them to the
+ * notification layer, which cancels stale schedules (for habits since
+ * paused/archived/deleted) and reschedules the rest.
+ *
+ * Standalone, not a store action: the boot effect and Habit Detail
+ * call it too. Lifecycle actions below fire it `void` — a notification
+ * failure must never break a habit mutation, so it swallows its own
+ * errors rather than rejecting onto an unhandled-rejection path.
+ */
+export async function syncHabitRemindersFromDb(): Promise<void> {
+  try {
+    const reminders = await getActiveHabitReminders();
+    await syncHabitReminders(reminders);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[notifications] habit reminder reconcile failed:', e);
+  }
+}
 
 /**
  * Habits List store — a hydration cache for the Habits tab.
@@ -116,6 +139,10 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
     await dbPauseHabit(id);
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
+    // A paused habit drops out of the active reminder set, so its
+    // notification must be cancelled. Fire-and-forget — see the
+    // syncHabitRemindersFromDb doc comment.
+    void syncHabitRemindersFromDb();
   },
 
   // dual-hydrate: resume reactivates the row + recomputes sort_order at
@@ -125,6 +152,9 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
     await dbResumeHabit(id);
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
+    // A resumed habit rejoins the active set — its reminder, if it has
+    // one, must be rescheduled.
+    void syncHabitRemindersFromDb();
   },
 
   // dual-hydrate: each mutation refreshes both stores
@@ -133,6 +163,8 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
     await dbArchiveHabit(id);
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
+    // Archived habits leave the active set — cancel any reminder.
+    void syncHabitRemindersFromDb();
   },
 
   // dual-hydrate: restore clears deleted_at + recomputes sort_order at
@@ -142,6 +174,10 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
     await dbRestoreHabit(id);
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
+    // Restore returns the habit to active (or paused, if it was paused
+    // before archiving) — reconcile so its reminder reschedules only
+    // if it landed back in the active set.
+    void syncHabitRemindersFromDb();
   },
 
   // dual-hydrate: each mutation refreshes both stores

@@ -15,8 +15,11 @@ import { Text } from '../components/primitives/Text';
 import { runMigrations } from '../db/migrate';
 import { cleanupOrphanWorkouts } from '../db/workouts';
 import { useBackupReminderStore } from '../state/backupReminderStore';
+import { syncHabitRemindersFromDb } from '../state/habitsListStore';
+import { useSettingsStore } from '../state/settingsStore';
 import { useTodayStore } from '../state/todayStore';
 import { ThemeProvider, useTheme, useThemeMode, useThemeStore } from '../theme';
+import { syncCheckInNotifications } from '../utils/notifications';
 
 // Dev-only floating affordance for /design. Conditional require so Metro
 // dead-code-eliminates both the import and the module body in production —
@@ -98,6 +101,31 @@ export default function RootLayout() {
     });
     return () => sub.remove();
   }, []);
+
+  // Boot-time notification reconcile. Once the settings store has
+  // hydrated from AsyncStorage, re-sync the two check-in reminders
+  // against the persisted times — this re-creates anything the OS
+  // dropped and applies any change made while the app was off. Gated
+  // on `_hasHydrated` so it never acts on the in-memory `null`
+  // defaults (which would silently cancel every reminder). Independent
+  // of the DB boot chain above; notifications don't need migrations.
+  const settingsHydrated = useSettingsStore((s) => s._hasHydrated);
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    const { morningCheckInTime, eveningCheckInTime } =
+      useSettingsStore.getState();
+    void syncCheckInNotifications(morningCheckInTime, eveningCheckInTime);
+  }, [settingsHydrated]);
+
+  // Boot-time habit-reminder reconcile. Runs once the DB is ready
+  // (migrations applied), reading active habits with a reminder_time
+  // and rescheduling their daily notifications — re-creating anything
+  // the OS dropped and sweeping reminders for habits paused or
+  // archived while the app was off.
+  useEffect(() => {
+    if (!bootReady) return;
+    void syncHabitRemindersFromDb();
+  }, [bootReady]);
 
   if (!fraunces || !inter || !hasHydrated) return null;
 

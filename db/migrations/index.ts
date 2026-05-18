@@ -15,6 +15,7 @@ import migration0001 from './0001_init';
 import migration0002 from './0002_workout_template_rotation_order';
 import migration0003 from './0003_habits_sort_order';
 import migration0004 from './0004_sets_unique';
+import migration0005 from './0005_habits_reminder_time';
 
 export type Migration = {
   version: number;
@@ -31,4 +32,5 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   },
   { version: 3, name: '0003_habits_sort_order', sql: migration0003 },
   { version: 4, name: '0004_sets_unique', sql: migration0004 },
+  { version: 5, name: '0005_habits_reminder_time', sql: migration0005 },
 ];
