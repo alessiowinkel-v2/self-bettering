@@ -1,0 +1,57 @@
+name: iOS unsigned build
+
+# Builds an unsigned .ipa of Lumen on a macOS runner.
+# No Apple account is involved. SideStore signs the .ipa on-device after install.
+# Trigger manually from the Actions tab (Run workflow).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Generate iOS native project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install
+
+      - name: Build unsigned .app
+        run: |
+          xcodebuild \
+            -workspace ios/Lumen.xcworkspace \
+            -scheme Lumen \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package .app into .ipa
+        working-directory: ios/build/Build/Products/Release-iphoneos
+        run: |
+          mkdir -p Payload
+          cp -r Lumen.app Payload/
+          zip -qr Lumen.ipa Payload
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lumen-ipa
+          path: ios/build/Build/Products/Release-iphoneos/Lumen.ipa
+          if-no-files-found: error

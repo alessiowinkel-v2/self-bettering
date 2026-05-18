@@ -26,12 +26,16 @@ import { buildGymWeekDots, formatRelativeDate } from '../../utils/gymHome';
  * GymEmpty's "No routines yet." / "Add one." pair.
  *
  * Hydration runs on focus — the store is populated via SQLite. No
- * mutations live here; Active Workout (Phase 3e+) will own the
- * start/complete writes and refresh this store + Today after each.
+ * mutations live here; Active Workout owns the start/complete writes
+ * and refreshes this store + Today after each, and the Add/Edit
+ * Routine modals (routes under /routine/) own their own writes plus
+ * a re-hydrate before popping back.
  *
- * Wiring into the Active Workout route is deferred to Phase 3e+.
- * Routine taps, Start, "+ Add routine", and "Add one." all log to
- * the console for now.
+ * Tap targets:
+ *   - Up next card's Start → /workout?templateId=... (active workout)
+ *   - Routine row tap     → /routine/[id] (edit routine)
+ *   - "+ Add routine"     → /routine/new (add routine)
+ *   - "Add one." in empty → /routine/new (add routine, first-time)
  */
 export default function GymScreen() {
   const theme = useTheme();
@@ -40,6 +44,17 @@ export default function GymScreen() {
   const startWorkout = useCallback(
     (templateId: string) => {
       router.push({ pathname: '/workout', params: { templateId } });
+    },
+    [router],
+  );
+
+  const openAddRoutine = useCallback(() => {
+    router.push('/routine/new');
+  }, [router]);
+
+  const openEditRoutine = useCallback(
+    (templateId: string) => {
+      router.push(`/routine/${templateId}`);
     },
     [router],
   );
@@ -135,7 +150,7 @@ export default function GymScreen() {
     return (
       <Screen>
         {Title}
-        <GymEmpty onAdd={() => console.log('[gym] add routine pressed')} />
+        <GymEmpty onAdd={openAddRoutine} />
       </Screen>
     );
   }
@@ -205,7 +220,7 @@ export default function GymScreen() {
               subtitle={subtitle}
               isNextUp={row.template.id === nextTemplateId}
               isLast={i === templates.length - 1}
-              onPress={() => startWorkout(row.template.id)}
+              onPress={() => openEditRoutine(row.template.id)}
             />
           );
         })}
@@ -213,7 +228,7 @@ export default function GymScreen() {
       <View style={{ marginTop: theme.spacing[2] }}>
         <TextButton
           label="+ Add routine"
-          onPress={() => console.log('[gym] add routine pressed')}
+          onPress={openAddRoutine}
           accessibilityLabel="Add a routine"
         />
       </View>

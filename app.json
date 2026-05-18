@@ -14,7 +14,8 @@
       "backgroundColor": "#0E0E0F"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aless.lumen"
     },
     "android": {
       "adaptiveIcon": {
@@ -31,6 +32,12 @@
       "expo-router",
       "expo-sqlite",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0b207a99-f920-4f0a-9725-1d2eb502dc86"
+      }
+    }
   }
 }

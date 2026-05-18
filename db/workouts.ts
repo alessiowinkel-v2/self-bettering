@@ -1,6 +1,6 @@
 import type { WorkoutTemplate, WorkoutTemplateExercise } from '../state/types';
 import { getDB } from './db';
-import { workoutId } from './ids';
+import { templateId, workoutId } from './ids';
 
 /**
  * A routine plus the date it was most recently completed (or null if
@@ -94,6 +94,83 @@ export async function insertWorkoutTemplate(
     `INSERT INTO workout_templates (id, name, exercises) VALUES (?, ?, ?);`,
     [template.id, template.name, JSON.stringify(template.exercises)]
   );
+}
+
+/**
+ * Create a new routine from the editor. Lands at the bottom of the
+ * rotation (MAX(rotation_order)+1) so it surfaces in the routine list
+ * without disturbing the next-up order of existing routines.
+ *
+ * Differs from insertWorkoutTemplate (which preserves the caller's id and
+ * leaves rotation_order at its default 0) in two ways:
+ *   1. Generates a `wt-${slug}-${ts36}` id locally
+ *   2. Sets rotation_order in the same statement so the new routine sits
+ *      after every existing one
+ *
+ * The transaction wrapper isn't strictly necessary for a single INSERT,
+ * but it matches updateWorkoutTemplate's shape and pins the
+ * MAX(rotation_order) subselect to the same logical moment as the insert
+ * — defensive against a hypothetical concurrent writer.
+ */
+export async function createWorkoutTemplate(input: {
+  name: string;
+  exercises: ReadonlyArray<WorkoutTemplateExercise>;
+}): Promise<WorkoutTemplate> {
+  const db = await getDB();
+  const id = templateId(input.name);
+  await db.runAsync(
+    `INSERT INTO workout_templates (id, name, exercises, rotation_order)
+     VALUES (
+       ?, ?, ?,
+       COALESCE((SELECT MAX(rotation_order) FROM workout_templates), 0) + 1
+     );`,
+    [id, input.name, JSON.stringify(input.exercises)]
+  );
+  return { id, name: input.name, exercises: input.exercises };
+}
+
+/**
+ * Rewrite a routine's name + exercises in place. Sets rotation_order
+ * is untouched so the routine keeps its position in the rotation.
+ *
+ * The prompt called out a delete-and-reinsert pattern against a separate
+ * template_exercises table, but the actual schema stores exercises as
+ * JSON inside workout_templates.exercises (see migration 0001). One
+ * UPDATE replaces the entire list atomically — simpler than the
+ * delete-and-reinsert it was modeled on, and the JSON column has no
+ * referential dependents (sets reference exercise_name as a string, not
+ * a template-exercise row id), so wholesale replacement stays safe.
+ */
+export async function updateWorkoutTemplate(input: {
+  id: string;
+  name: string;
+  exercises: ReadonlyArray<WorkoutTemplateExercise>;
+}): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE workout_templates
+        SET name = ?, exercises = ?
+      WHERE id = ?;`,
+    [input.name, JSON.stringify(input.exercises), input.id]
+  );
+}
+
+/**
+ * Read a single routine by id. Returns null if no row matches (e.g. the
+ * routine was deleted between the Gym Home tap and the editor mount).
+ * Edit Routine uses this for its initialRoutine load.
+ */
+export async function getWorkoutTemplate(
+  id: string
+): Promise<WorkoutTemplate | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<WorkoutTemplateRow>(
+    `SELECT id, name, exercises
+       FROM workout_templates
+      WHERE id = ?;`,
+    [id]
+  );
+  return row ? rowToTemplate(row) : null;
 }
 
 /**

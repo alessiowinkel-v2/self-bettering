@@ -57,6 +57,10 @@ export function workoutId(): string {
   return `w-${ts36()}`;
 }
 
+export function templateId(name: string): string {
+  return `wt-${slug(name)}-${ts36()}`;
+}
+
 export function setId(setNumber: number): string {
   return `s-${ts36()}-${setNumber}-${rand4()}`;
 }

@@ -45,3 +45,32 @@ export function formatWeekdayWithDate(iso: string): string {
 export function shiftIsoDate(iso: string, deltaDays: number): string {
   return toIsoDate(addDays(parseISO(iso), deltaDays));
 }
+
+/**
+ * Compact "last used" phrase for the Exercise Picker rows. Mirrors the
+ * design PDF: "today" / "yesterday" today and yesterday, three-letter
+ * weekday for the rest of the current week, "MMM d" beyond that.
+ *
+ *   0 days     → "today"
+ *   1 day      → "yesterday"
+ *   2–6 days   → "Sat"
+ *   7+ days    → "Apr 24"
+ *
+ * Picker right-column only — kept here so the format string sits in the
+ * same module as the rest of the calendar shorthand.
+ */
+export function formatExerciseLastUsed(input: {
+  fromIso: string;
+  todayIso: string;
+}): string {
+  const from = parseISO(input.fromIso);
+  const today = parseISO(input.todayIso);
+  const days = Math.max(
+    0,
+    Math.floor((today.getTime() - from.getTime()) / 86400000)
+  );
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return format(from, 'EEE');
+  return format(from, 'MMM d');
+}

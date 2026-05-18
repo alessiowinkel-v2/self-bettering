@@ -124,6 +124,8 @@ function RootStack() {
         <Stack.Screen name="habit/[id]" />
         <Stack.Screen name="journal/[date]" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="routine/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="routine/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen
           name="workout"
           options={{ presentation: 'fullScreenModal', gestureEnabled: false }}

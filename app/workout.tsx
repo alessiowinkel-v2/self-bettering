@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   DoneTakeover,
   ExerciseHeader,
+  ExercisePicker,
   NumericPad,
   PreviousExerciseRow,
   RestTimer,
@@ -14,7 +15,11 @@ import {
   type SetRowStatus,
 } from '../components/workout';
 import { Text } from '../components/primitives';
-import { useActiveWorkoutStore, selectIsLastSet } from '../state/activeWorkoutStore';
+import {
+  useActiveWorkoutStore,
+  selectIsLastSet,
+  type LoggedSet,
+} from '../state/activeWorkoutStore';
 import { useGymHomeStore } from '../state/gymHomeStore';
 import { useTodayStore } from '../state/todayStore';
 import { useTheme } from '../theme';
@@ -58,12 +63,16 @@ import { getMostRecentOrphan } from '../db/workouts';
  *     extracted as children to localize the 1Hz re-render. Wait until
  *     rest-timer behavior gets more elaborate or DevTools shows it
  *     costing frames on real-device profiling.
- *   - In-flight guards on startNewWorkout and logCurrentSet. Take
- *     when the swap-exercise modal (Phase 4) adds a second writer to
- *     the store. The UI-level isLogging gate in SetRow + the DB-level
- *     UNIQUE constraint already prevent the row-Log double-tap race;
- *     adding store-level guards is only needed once concurrent writers
- *     exist.
+ *   - In-flight guards on startNewWorkout / logCurrentSet /
+ *     swapCurrentExercise. A row-Log cannot race a swap — the picker
+ *     is a page-sheet covering the set rows. Swap-vs-swap is the one
+ *     interleave the picker does not structurally rule out
+ *     (swapCurrentExercise awaits one indexed read between its get()
+ *     and set()), but the picker's dismiss-then-reopen animation
+ *     dwarfs that read's latency, so it stays unreachable in practice.
+ *     SetRow's isLogging gate + the DB-level UNIQUE constraint cover
+ *     the row-Log double-tap; store-level guards stay deferred until a
+ *     genuinely concurrent writer exists.
  *   - SetRow.handleLog silent error swallow. Wire to the toast/Alert
  *     system when that's built. The UNIQUE-collision case is no-op
  *     by design — silent is correct there; the gap is everything else.
@@ -86,11 +95,15 @@ export default function WorkoutScreen() {
     (s) => s.currentExerciseIndex,
   );
   const restEndsAt = useActiveWorkoutStore((s) => s.restEndsAt);
+  const swappedOut = useActiveWorkoutStore((s) => s.swappedOut);
   const isLastSet = useActiveWorkoutStore(selectIsLastSet);
   const startNewWorkout = useActiveWorkoutStore((s) => s.startNewWorkout);
   const resumeWorkout = useActiveWorkoutStore((s) => s.resumeWorkout);
   const logCurrentSet = useActiveWorkoutStore((s) => s.logCurrentSet);
   const skipRest = useActiveWorkoutStore((s) => s.skipRest);
+  const swapCurrentExercise = useActiveWorkoutStore(
+    (s) => s.swapCurrentExercise,
+  );
   const completeAndSave = useActiveWorkoutStore((s) => s.completeAndSave);
   const abandon = useActiveWorkoutStore((s) => s.abandon);
   const reset = useActiveWorkoutStore((s) => s.reset);
@@ -211,15 +224,62 @@ export default function WorkoutScreen() {
     return ex.lastSets[currentSetNumber - 1] ?? null;
   }, [exercises, currentExerciseIndex, currentSetNumber]);
 
+  // Rows shown above the current exercise header — every exercise the
+  // user has moved past, newest last. Two sources merge in workout
+  // order: exercises that ran to completion (exercises[0..current-1])
+  // and exercises swapped away (swappedOut[]). Per slot i, the
+  // swapped-away occupants come before the exercise that completed in
+  // that slot; slot `currentExerciseIndex` contributes only its
+  // swapped-away occupants — its live occupant is the current exercise.
+  // A swapped-away entry with no logged sets (swap on set 1) renders
+  // nothing — PreviousExerciseRow guards on it — so the visible
+  // previous row falls through to the last occupant that logged a set.
+  // Keys are positional so duplicate names (swap back to an exercise
+  // used earlier) never collide.
+  const previousRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      name: string;
+      sets: ReadonlyArray<LoggedSet>;
+    }> = [];
+    for (let i = 0; i <= currentExerciseIndex; i++) {
+      swappedOut
+        .filter((s) => s.index === i)
+        .forEach((s, seq) => {
+          rows.push({
+            key: `swap-${i}-${seq}`,
+            name: s.name,
+            sets: s.loggedSets,
+          });
+        });
+      if (i < currentExerciseIndex) {
+        const ex = exercises[i];
+        if (ex) {
+          rows.push({ key: `done-${i}`, name: ex.name, sets: ex.loggedSets });
+        }
+      }
+    }
+    return rows;
+  }, [exercises, currentExerciseIndex, swappedOut]);
+
   const [draftKg, setDraftKg] = useState<number | null>(null);
   const [draftReps, setDraftReps] = useState<number | null>(null);
+  // Clear drafts when the active set advances. The `currentExercise?.name`
+  // dep covers the one case the other two miss: a swap whose outgoing
+  // exercise had zero logged sets leaves currentExerciseIndex and
+  // currentSetNumber both unchanged, so only the name marks that the
+  // active set now belongs to a different exercise.
   useEffect(() => {
     setDraftKg(null);
     setDraftReps(null);
-  }, [currentExerciseIndex, currentSetNumber]);
+  }, [currentExerciseIndex, currentSetNumber, currentExercise?.name]);
 
   // Numeric pad open state. Non-null = pad covers bottom half; null = hidden.
   const [editingField, setEditingField] = useState<NumericPadMode | null>(null);
+
+  // Swap-exercise picker open state. The picker is a page-sheet modal —
+  // while it's up the set rows are covered, so no Log can race the swap.
+  const [swapPickerVisible, setSwapPickerVisible] = useState(false);
 
   const displayedKg = draftKg ?? placeholderForCurrentSet?.kg ?? null;
   const displayedReps = draftReps ?? placeholderForCurrentSet?.reps ?? null;
@@ -239,6 +299,23 @@ export default function WorkoutScreen() {
     [editingField],
   );
   const onPadDismiss = useCallback(() => setEditingField(null), []);
+
+  // Open the swap picker. No haptic — opening the picker modal is the
+  // system's own response to the tap.
+  const onOpenSwap = useCallback(() => setSwapPickerVisible(true), []);
+  const onCloseSwap = useCallback(() => setSwapPickerVisible(false), []);
+  // ExercisePicker fires haptics.light() itself on pick; the swap adds
+  // none. onPick is synchronous-typed — fire-and-forget the async
+  // re-query (one indexed read; the modal is dismissing over it). A
+  // rejected re-query (exceptional — a local indexed read) leaves the
+  // old exercise in the slot; swallow it rather than surface an
+  // unhandled rejection.
+  const onSwapPick = useCallback(
+    (name: string) => {
+      void swapCurrentExercise(name).catch(() => {});
+    },
+    [swapCurrentExercise],
+  );
 
   const onRowLog = useCallback(async () => {
     if (displayedKg === null || displayedReps === null) return;
@@ -319,10 +396,8 @@ export default function WorkoutScreen() {
     );
   }
 
-  // Active layout. Previous-exercise rows render above the current
-  // exercise header in completion order (already-completed exercises).
-  const previousExercises = exercises.slice(0, currentExerciseIndex);
-
+  // Active layout. Previous-exercise rows (`previousRows`, computed
+  // above) render above the current exercise header.
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
@@ -388,11 +463,11 @@ export default function WorkoutScreen() {
           paddingBottom: theme.spacing[8] + 80, // headroom for rest banner
         }}
       >
-        {previousExercises.map((ex) => (
+        {previousRows.map((row) => (
           <PreviousExerciseRow
-            key={ex.name}
-            name={ex.name}
-            sets={ex.loggedSets}
+            key={row.key}
+            name={row.name}
+            sets={row.sets}
           />
         ))}
 
@@ -404,6 +479,7 @@ export default function WorkoutScreen() {
                 setCount={currentExercise.setCount}
                 repRange={currentExercise.repRange}
                 lastSets={currentExercise.lastSets}
+                onSwap={onOpenSwap}
               />
             </View>
 
@@ -520,6 +596,18 @@ export default function WorkoutScreen() {
           </View>
         </>
       ) : null}
+
+      {/* Swap-exercise picker. Page-sheet modal — `swappingFrom` drives
+          both the "Replacing X." line and the greyed/disabled current
+          row inside the picker. */}
+      <ExercisePicker
+        visible={swapPickerVisible}
+        mode="swap"
+        swappingFrom={currentExercise?.name ?? null}
+        loggedSetsCount={currentExercise?.loggedSets.length ?? 0}
+        onPick={onSwapPick}
+        onClose={onCloseSwap}
+      />
     </SafeAreaView>
   );
 }

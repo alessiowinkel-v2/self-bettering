@@ -61,6 +61,23 @@ export type ExerciseProgress = {
   loggedSets: ReadonlyArray<LoggedSet>;
 };
 
+/**
+ * An exercise swapped away mid-workout. Snapshots the name, the sets
+ * logged against it before the swap, and the slot index it occupied.
+ * The index lets the previous-exercise merge interleave swapped-away
+ * exercises with completed ones in chronological order.
+ *
+ * In-memory only. The DB still holds this exercise's sets under its
+ * original name (keyed by workout_id) — the snapshot is purely for
+ * in-session display and is never persisted.
+ */
+type SwappedOutExercise = {
+  /** Index in exercises[] this exercise occupied when it was swapped away. */
+  index: number;
+  name: string;
+  loggedSets: ReadonlyArray<LoggedSet>;
+};
+
 export type ActiveWorkoutStatus = 'idle' | 'loading' | 'active' | 'done';
 
 type ActiveWorkoutState = {
@@ -79,6 +96,13 @@ type ActiveWorkoutState = {
    * set and we transitioned straight to 'done').
    */
   restEndsAt: number | null;
+  /**
+   * Exercises swapped away during this session, oldest-first. In-memory
+   * only — never written to disk. Feeds the previous-exercise rows so a
+   * swapped-away exercise stays visible above the current header with
+   * the sets logged against it. Cleared with the rest of the slice.
+   */
+  swappedOut: ReadonlyArray<SwappedOutExercise>;
 
   startNewWorkout: (templateId: string) => Promise<void>;
   /**
@@ -91,6 +115,15 @@ type ActiveWorkoutState = {
   resumeWorkout: (orphan: ResumableOrphan) => Promise<void>;
   logCurrentSet: (input: { kg: number; reps: number }) => Promise<void>;
   skipRest: () => void;
+  /**
+   * Replace the current exercise with `pickedName`. Snapshots the
+   * outgoing exercise onto `swappedOut`, renames the slot, clears its
+   * logged sets, and re-queries the LAST line for the incoming
+   * exercise. No-op when the pick resolves to the exercise already in
+   * the slot (case-insensitive). Sets already logged for the outgoing
+   * exercise stay on disk under its original name.
+   */
+  swapCurrentExercise: (pickedName: string) => Promise<void>;
   /**
    * Persists `completed_at` + `duration_seconds`. Does NOT reset the
    * store — `status` stays at `'done'` so the DoneTakeover stays
@@ -121,6 +154,7 @@ const initialState = {
   exercises: [] as ReadonlyArray<ExerciseProgress>,
   currentExerciseIndex: 0,
   restEndsAt: null,
+  swappedOut: [] as ReadonlyArray<SwappedOutExercise>,
 };
 
 export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
@@ -181,6 +215,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       exercises,
       currentExerciseIndex: 0,
       restEndsAt: null,
+      swappedOut: [],
     });
   },
 
@@ -260,6 +295,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       exercises,
       currentExerciseIndex,
       restEndsAt: null,
+      swappedOut: [],
     });
   },
 
@@ -326,6 +362,56 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
 
   skipRest: () => {
     set({ restEndsAt: null });
+  },
+
+  swapCurrentExercise: async (pickedName) => {
+    const state = get();
+    if (state.status !== 'active' || state.workoutId === null) return;
+
+    const exerciseIndex = state.currentExerciseIndex;
+    const current = state.exercises[exerciseIndex];
+    if (!current) return;
+
+    const trimmed = pickedName.trim();
+    // No-op guards. Empty pick is defensive (the picker trims its
+    // add-new query already). The name match is case-insensitive: a
+    // pick that only differs in capitalization is still "the exercise
+    // you're on", and swapping would wipe loggedSets for nothing.
+    if (trimmed.length === 0) return;
+    if (trimmed.toLowerCase() === current.name.toLowerCase()) return;
+
+    // Snapshot the outgoing exercise before mutating. loggedSets is a
+    // frozen array — the swap below replaces the slot with a fresh
+    // ExerciseProgress and never mutates this one — so holding the
+    // reference is safe.
+    const snapshot: SwappedOutExercise = {
+      index: exerciseIndex,
+      name: current.name,
+      loggedSets: current.loggedSets,
+    };
+
+    // Re-query the LAST line for the incoming exercise — the same read
+    // startNewWorkout runs per exercise. Status stays 'active' across
+    // the await (no 'loading' flip) so the screen doesn't blank under
+    // the dismissing picker.
+    const lastSets = await getLastSetsForExerciseBeforeWorkout({
+      exerciseName: trimmed,
+      currentWorkoutId: state.workoutId,
+    });
+
+    const swapped: ExerciseProgress = {
+      ...current,
+      name: trimmed,
+      lastSets,
+      loggedSets: [],
+    };
+
+    set({
+      exercises: state.exercises.map((e, i) =>
+        i === exerciseIndex ? swapped : e,
+      ),
+      swappedOut: [...state.swappedOut, snapshot],
+    });
   },
 
   completeAndSave: async () => {
