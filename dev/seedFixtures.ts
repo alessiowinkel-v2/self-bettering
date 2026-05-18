@@ -95,14 +95,12 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
     ],
     rotationOrder: 1,
     priorSets: {
-      // Mirrors PDF page 15's "LAST 82.5kg × 6, 6, 5, 4" Bench press
-      // example so the design frame can be reproduced on first run.
-      'Bench press': [
-        { kg: 82.5, reps: 6 },
-        { kg: 82.5, reps: 6 },
-        { kg: 82.5, reps: 5 },
-        { kg: 82.5, reps: 4 },
-      ],
+      // Bench press is intentionally absent here. Its prior-workout data
+      // is owned in full by `exerciseHistoryFixtures` below — a 23-session
+      // history that the per-template priorSets block would otherwise
+      // double-count by one. Active Workout's "LAST" line for Bench press
+      // still resolves: the most recent of those 23 seeded workouts is
+      // its prior session.
       'Incline DB press': [
         { kg: 20, reps: 8 },
         { kg: 20, reps: 8 },
@@ -181,17 +179,10 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
     ],
     rotationOrder: 4,
     priorSets: {
-      'Overhead press': [
-        { kg: 50, reps: 8 },
-        { kg: 50, reps: 7 },
-        { kg: 50, reps: 6 },
-        { kg: 50, reps: 5 },
-      ],
-      'Lateral raise': [
-        { kg: 8, reps: 12 },
-        { kg: 8, reps: 11 },
-        { kg: 8, reps: 10 },
-      ],
+      // Overhead press and Lateral raise are intentionally absent here.
+      // Their prior-workout data is owned in full by
+      // `exerciseHistoryFixtures` below (12 and 4 sessions). Leaving them
+      // in this map would double-count each by one session.
       'Dumbbell flye': [
         { kg: 12, reps: 12 },
         { kg: 12, reps: 11 },
@@ -284,3 +275,149 @@ export function seedFor(name: SeedName, now: Date = new Date()): TodaySeed {
     completedWorkoutDate: null,
   };
 }
+
+/* ----------------------------- Exercise history --------------------------- */
+
+/**
+ * A single seeded set within one exercise-history session. `restAfter`
+ * is the gap, in seconds, between this set's `logged_at` and the next
+ * set's — the last set of a session ignores its `restAfter` since it
+ * has no successor (Exercise History renders that as an em-dash).
+ */
+export type SeedHistorySet = {
+  kg: number | null;
+  reps: number | null;
+  /** Seconds until the next set is logged. Ignored for the final set. */
+  restAfter: number;
+};
+
+/**
+ * One completed workout in an exercise's history. `daysAgo` is the
+ * whole-day offset back from `now`; the session is dated to that
+ * calendar day. Every offset here is kept large enough that the session
+ * lands before the current Mon–Sun week — see `exerciseHistoryFixtures`.
+ */
+export type SeedHistorySession = {
+  daysAgo: number;
+  sets: ReadonlyArray<SeedHistorySet>;
+};
+
+/**
+ * A run of exercise-history sessions, bound to the template the workout
+ * belongs to. The template id must be a real `workout_templates` row —
+ * `workouts.template_id` is NOT NULL with ON DELETE RESTRICT — and its
+ * name is what the Exercise History breadcrumb shows.
+ */
+export type SeedExerciseHistory = {
+  exerciseName: string;
+  templateId: string;
+  sessions: ReadonlyArray<SeedHistorySession>;
+};
+
+/**
+ * Build a rising-weight history. `weights[i]` is the working load of
+ * session i (oldest first); each session is `setCount` sets at that
+ * load with reps drawn from `repPattern` (cycled). Sessions are spaced
+ * `spacingDays` apart and the newest lands `endDaysAgo` back, so the
+ * whole run sits before the current week.
+ *
+ * Rest gaps stagger 75–120s between sets via a fixed, varied cycle —
+ * deterministic so the seed is reproducible across runs.
+ */
+function buildHistory(input: {
+  weights: ReadonlyArray<number>;
+  setCount: number;
+  repPattern: ReadonlyArray<number>;
+  spacingDays: number;
+  endDaysAgo: number;
+}): ReadonlyArray<SeedHistorySession> {
+  const { weights, setCount, repPattern, spacingDays, endDaysAgo } = input;
+  // Varied rest cycle, all within the 75–120s band the spec asks for.
+  const restCycle = [82, 97, 110, 88, 119, 76, 104, 93];
+  const sessions: SeedHistorySession[] = [];
+  const lastIndex = weights.length - 1;
+
+  for (let i = 0; i < weights.length; i += 1) {
+    const daysAgo = endDaysAgo + (lastIndex - i) * spacingDays;
+    const sets: SeedHistorySet[] = [];
+    for (let s = 0; s < setCount; s += 1) {
+      // Cycle reps and rests with offsets so different sessions don't
+      // all share the same shape.
+      const reps = repPattern[(i + s) % repPattern.length];
+      const restAfter = restCycle[(i * setCount + s) % restCycle.length];
+      sets.push({ kg: weights[i], reps, restAfter });
+    }
+    sessions.push({ daysAgo, sets });
+  }
+  return sessions;
+}
+
+/**
+ * Exercise-history seed for the 'default' and 'today-is-done' seeds.
+ * Each entry produces one completed workout per session, with that
+ * exercise's sets only — sessions are never mixed, so the per-exercise
+ * session counts read back exactly (Bench 23, Overhead 12, Lateral 4).
+ *
+ * Why these shapes drive the Exercise History states:
+ *  - Bench press, 23 sessions, weighted sets at exactly 5 and 8 reps →
+ *    chart (>= 2) + 5/8-rep PR row (>= 10 sessions, both rep counts hit).
+ *  - Overhead press, 12 sessions, same rep coverage → chart + PR row.
+ *  - Lateral raise, 4 sessions, flat weights → chart only; the PR row is
+ *    gated off by the 4 < 10 session count, and no session after the
+ *    first beats session 1's top set so no PR pills appear past it.
+ *  - Front squat: deliberately absent — the route's empty state.
+ *  - Deadlift: untouched here; its single priorSets session is the
+ *    "First session." state.
+ *
+ * Bench press reps include explicit 5s and 8s in the pattern; Overhead
+ * press likewise. Lateral raise stays in the 10–12 band — its PR row is
+ * count-gated regardless.
+ */
+export const exerciseHistoryFixtures: ReadonlyArray<SeedExerciseHistory> = [
+  {
+    // 23 sessions, ~3 months. Spacing 3 days, newest 9 days ago →
+    // oldest = 9 + 22 * 3 = 75 days ago. Weights climb 60 → 82.5 with
+    // two plateaus and a couple of dips so PR pills scatter realistically
+    // rather than landing on every row.
+    exerciseName: 'Bench press',
+    templateId: 'wt-push-a',
+    sessions: buildHistory({
+      weights: [
+        60, 60, 62.5, 65, 65, 67.5, 65, 67.5, 70, 72.5, 72.5, 70, 75,
+        75, 77.5, 80, 77.5, 80, 80, 82.5, 80, 82.5, 82.5,
+      ],
+      setCount: 4,
+      repPattern: [8, 7, 6, 5],
+      spacingDays: 3,
+      endDaysAgo: 9,
+    }),
+  },
+  {
+    // 12 sessions. Spacing 4 days, newest 12 days ago → oldest =
+    // 12 + 11 * 4 = 56 days ago. Rising 35 → 52.5 with one plateau and
+    // one dip.
+    exerciseName: 'Overhead press',
+    templateId: 'wt-push-b',
+    sessions: buildHistory({
+      weights: [35, 37.5, 37.5, 40, 42.5, 40, 45, 47.5, 47.5, 50, 47.5, 52.5],
+      setCount: 4,
+      repPattern: [8, 7, 6, 5],
+      spacingDays: 4,
+      endDaysAgo: 12,
+    }),
+  },
+  {
+    // 4 sessions, flat weights. Session 1's top set (10kg) is never
+    // exceeded, so no PR pills appear after the first session. PR row is
+    // off anyway: 4 < 10 sessions.
+    exerciseName: 'Lateral raise',
+    templateId: 'wt-push-b',
+    sessions: buildHistory({
+      weights: [10, 10, 10, 10],
+      setCount: 3,
+      repPattern: [12, 11, 10],
+      spacingDays: 5,
+      endDaysAgo: 14,
+    }),
+  },
+];

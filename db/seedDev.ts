@@ -1,9 +1,13 @@
 import { parseISO, subDays } from 'date-fns';
-import { seedFor, type SeedName } from '../dev/seedFixtures';
+import {
+  exerciseHistoryFixtures,
+  seedFor,
+  type SeedName,
+} from '../dev/seedFixtures';
 import { toIsoDate } from '../utils/dateFormat';
 import { getDB } from './db';
 import { createHabit } from './habits';
-import { setId } from './ids';
+import { setId, slug } from './ids';
 
 /**
  * Dev-only seeder. Wipes the domain tables and reinserts rows built from
@@ -159,11 +163,92 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
       }
     }
 
+    // Exercise history. One completed workout per seeded session, each
+    // carrying only that exercise's sets so the per-exercise session
+    // counts read back exactly (Bench 23, Overhead 12, Lateral 4). This
+    // makes the Exercise History route's populated states — chart, the
+    // 5/8-rep PR row, the scatter of PR pills — reachable against real
+    // rows for the 'default' and 'today-is-done' seeds.
+    //
+    // 'first-time' seeds an empty DB and never reaches here:
+    // workoutTemplates is [], so the loop below has no valid template_id
+    // to write against and is correctly skipped.
+    //
+    // Every session is dated `daysAgo` back from now. The fixtures keep
+    // those offsets large enough that no workout lands inside the current
+    // Mon–Sun week — Gym Home's THIS WEEK strip and Today's frames stay
+    // correct, exactly as the per-template prior-workout block above
+    // depends on.
+    //
+    // Each set's logged_at is staggered from the workout's started_at by
+    // the cumulative rest gaps, so Exercise History's consecutive-set
+    // rest times derive from real timestamp deltas.
+    if (seed.workoutTemplates.length > 0) {
+      const seededTemplateIds = new Set(
+        seed.workoutTemplates.map((t) => t.id)
+      );
+      for (const history of exerciseHistoryFixtures) {
+        if (!seededTemplateIds.has(history.templateId)) continue;
+        for (let sx = 0; sx < history.sessions.length; sx += 1) {
+          const session = history.sessions[sx];
+          const sessionDate = toIsoDate(subDays(new Date(), session.daysAgo));
+          const startedAtMs = parseISO(`${sessionDate}T08:00:00.000Z`).getTime();
+          const workoutIdValue = `w-seed-hist-${slug(history.exerciseName)}-${sx}`;
+
+          // Cumulative offset of each set from started_at, derived by
+          // summing the prior sets' rest gaps. The last set's restAfter
+          // is unused — it has no successor.
+          let offsetMs = 0;
+          let lastLoggedMs = startedAtMs;
+          for (let i = 0; i < session.sets.length; i += 1) {
+            const loggedMs = startedAtMs + offsetMs;
+            lastLoggedMs = loggedMs;
+            offsetMs += session.sets[i].restAfter * 1000;
+          }
+          const completedAtMs = lastLoggedMs + 60 * 1000;
+          const durationSeconds = Math.round(
+            (completedAtMs - startedAtMs) / 1000
+          );
+
+          await db.runAsync(
+            `INSERT INTO workouts (id, template_id, started_at, completed_at, duration_seconds)
+             VALUES (?, ?, ?, ?, ?);`,
+            [
+              workoutIdValue,
+              history.templateId,
+              new Date(startedAtMs).toISOString(),
+              new Date(completedAtMs).toISOString(),
+              durationSeconds,
+            ]
+          );
+
+          let setOffsetMs = 0;
+          for (let i = 0; i < session.sets.length; i += 1) {
+            const s = session.sets[i];
+            const setNumber = i + 1;
+            const id = setId(setNumber);
+            await db.runAsync(
+              `INSERT INTO sets (id, workout_id, exercise_name, set_number, kg, reps, logged_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?);`,
+              [
+                id,
+                workoutIdValue,
+                history.exerciseName,
+                setNumber,
+                s.kg,
+                s.reps,
+                new Date(startedAtMs + setOffsetMs).toISOString(),
+              ]
+            );
+            setOffsetMs += s.restAfter * 1000;
+          }
+        }
+      }
+    }
+
     // 'today-is-done' seed: an additional completed workout dated today
     // so Today's Next-workout slot rolls into the "done" branch. Sets
-    // for this workout aren't seeded — the takeover doesn't render them
-    // and any future Exercise History view would treat the prior
-    // template-seeded sets as the source of truth anyway.
+    // for this workout aren't seeded — the takeover doesn't render them.
     if (seed.completedWorkoutDate && seed.workoutTemplates.length > 0) {
       const template = seed.workoutTemplates[0];
       const startedAt = `${seed.completedWorkoutDate}T08:00:00.000Z`;

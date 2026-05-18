@@ -53,7 +53,7 @@ Tracks what's been designed in Claude Design, what's been built directly in Clau
 - Dark · 4 sessions (flatter chart, no PR row, history rows visible)
 - Light · default
 
-**Status:** ✅ Designed. ✅ Implemented. ✅ Phone-tested. Chart stays quiet (1px line, single accent dot on most recent point, two hollow rings on previous two, only first/middle/last x-axis labels). PR pills are small hairline outlines, not badges. "PUSH A · TODAY" breadcrumb at the top reads as nice unprompted addition.
+**Status:** ✅ Designed. ✅ Implemented. Phone-test pending. The earlier "✅ Phone-tested" was stale — this screen was designed only, never built, until it was implemented in Claude Code: pure derivations (utils/exerciseHistory.ts) with unit tests, the TopSetChart SVG, the route, real SQLite queries (db/exercises.ts — getSessionRowsForExercise), and the tap-to-open entry point from the Active Workout exercise name. Chart stays quiet (1px line, single accent dot on the most recent point, two hollow rings on the previous two, first/middle/last x-axis labels only). PR pills are small hairline outlines, not badges. The breadcrumb shows the routine name and the most recent session's relative date.
 
 ### Gym Home
 **States covered:**

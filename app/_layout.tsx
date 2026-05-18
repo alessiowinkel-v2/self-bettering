@@ -127,6 +127,7 @@ function RootStack() {
           options={{ presentation: 'modal' }}
         />
         <Stack.Screen name="journal/[date]" />
+        <Stack.Screen name="exercise/[name]" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="routine/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="routine/[id]" options={{ presentation: 'modal' }} />

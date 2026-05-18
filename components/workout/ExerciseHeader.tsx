@@ -20,6 +20,11 @@ type ExerciseHeaderProps = {
    * the name.
    */
   onSwap: () => void;
+  /**
+   * Opens this exercise's history. Wired to a tap on the name itself —
+   * the name is a quiet tap target, not a signposted button.
+   */
+  onOpenHistory: () => void;
 };
 
 /**
@@ -28,6 +33,11 @@ type ExerciseHeaderProps = {
  *   Bench press        Swap.    ← Fraunces display + swap-exercise link
  *   4 × 5–8                      ← Fraunces italic subtitle, tone-secondary
  *   LAST  82.5kg × 6, 6, 5, 4    ← label "LAST" + body summary, both tone-secondary
+ *
+ * The exercise name is itself a tap target — tapping it opens Exercise
+ * History via `onOpenHistory`. There is no underline, chevron, or button
+ * chrome: the affordance is discoverable, not signposted, matching the
+ * design's other plain-text actions. The only feedback is a press dim.
  *
  * The "Swap." link to the right of the name opens the swap-exercise
  * picker via `onSwap` — the affordance is current-exercise only, which
@@ -44,6 +54,7 @@ export function ExerciseHeader({
   repRange,
   lastSets,
   onSwap,
+  onOpenHistory,
 }: ExerciseHeaderProps) {
   const theme = useTheme();
   const lastLine = formatLastSetsLine(lastSets);
@@ -53,12 +64,20 @@ export function ExerciseHeader({
       {/* Name + swap link. flex-start so the link aligns to the first
           line of a name that wraps; the Pressable is one display
           line-height tall with the "Swap." text centered in it. The
-          name flex-shrinks so a long name wraps rather than shoving the
-          link off-screen. */}
+          name Pressable flex-shrinks so a long name wraps rather than
+          shoving the link off-screen. */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <Text variant="display" style={{ flexShrink: 1 }}>
-          {name}
-        </Text>
+        <Pressable
+          onPress={onOpenHistory}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${name} history`}
+          style={({ pressed }) => [
+            { flexShrink: 1 },
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <Text variant="display">{name}</Text>
+        </Pressable>
         <Pressable
           onPress={onSwap}
           hitSlop={8}

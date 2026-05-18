@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useRef } from 'react';
 import {
   Animated,
@@ -65,6 +66,19 @@ const habitRows: Array<{ name: string; streak: number }> = [
   { name: 'Read 20 minutes', streak: 3 },
 ];
 
+// Exercise History dev links. The route has no Active Workout entry
+// point yet (that lands in a later step), so the Design screen is the
+// only way to reach it. Each link targets a seeded exercise that lands
+// the route in a distinct state. Removed once the real entry point
+// exists.
+const exerciseHistoryLinks: ReadonlyArray<{ name: string; state: string }> = [
+  { name: 'Bench press', state: '23 sessions — chart + PR row' },
+  { name: 'Overhead press', state: '12 sessions — chart + PR row' },
+  { name: 'Lateral raise', state: '4 sessions — chart, no PR row' },
+  { name: 'Deadlift', state: 'first session' },
+  { name: 'Front squat', state: 'empty' },
+];
+
 // Belt + suspenders gating. _layout.tsx omits this route from the Stack
 // in production, but the file still exists in the bundle and could be
 // reached via a deep link or stale navigation state. Returning null at
@@ -77,6 +91,7 @@ export default function DesignScreen() {
 
 function DesignScreenBody() {
   const theme = useTheme();
+  const router = useRouter();
   const override = useThemeStore((s) => s.override);
   const setOverride = useThemeStore((s) => s.setOverride);
   const activeSeed = useDevStore((s) => s.activeSeed);
@@ -165,6 +180,45 @@ function DesignScreenBody() {
           <Text variant="caption" tone="secondary" style={{ marginTop: theme.spacing[1] }}>
             Output in Metro console.
           </Text>
+        </View>
+
+        {/* Exercise History dev links. Removed once the route has a real
+            entry point from Active Workout. */}
+        <SectionHeader>Exercise History.</SectionHeader>
+        <Text
+          variant="caption"
+          tone="secondary"
+          style={{ marginBottom: theme.spacing[3] }}
+        >
+          Opens the route against seeded data — seed first. Each link
+          lands a distinct state.
+        </Text>
+        <View style={{ gap: theme.spacing[3] }}>
+          {exerciseHistoryLinks.map((link) => (
+            <View
+              key={link.name}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'baseline',
+                justifyContent: 'space-between',
+                gap: theme.spacing[4],
+              }}
+            >
+              <TextButton
+                label={link.name}
+                onPress={() =>
+                  router.push({
+                    pathname: '/exercise/[name]',
+                    params: { name: link.name },
+                  })
+                }
+                accessibilityLabel={`Open Exercise History for ${link.name}, ${link.state}`}
+              />
+              <Text variant="caption" tone="tertiary">
+                {link.state}
+              </Text>
+            </View>
+          ))}
         </View>
 
         <RNText style={sectionHeading}>Type.</RNText>

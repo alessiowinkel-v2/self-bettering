@@ -304,6 +304,19 @@ export default function WorkoutScreen() {
   // system's own response to the tap.
   const onOpenSwap = useCallback(() => setSwapPickerVisible(true), []);
   const onCloseSwap = useCallback(() => setSwapPickerVisible(false), []);
+
+  // Open the current exercise's history. Pushed onto the stack above the
+  // workout — the workout screen stays mounted, so its timer, draft set,
+  // and rest countdown all survive the trip; router.back() reveals it
+  // untouched. The raw exercise name goes through `params`; expo-router
+  // URL-encodes the [name] segment and the route decodes it.
+  const onOpenExerciseHistory = useCallback(() => {
+    if (!currentExercise) return;
+    router.push({
+      pathname: '/exercise/[name]',
+      params: { name: currentExercise.name },
+    });
+  }, [router, currentExercise]);
   // ExercisePicker fires haptics.light() itself on pick; the swap adds
   // none. onPick is synchronous-typed — fire-and-forget the async
   // re-query (one indexed read; the modal is dismissing over it). A
@@ -480,6 +493,7 @@ export default function WorkoutScreen() {
                 repRange={currentExercise.repRange}
                 lastSets={currentExercise.lastSets}
                 onSwap={onOpenSwap}
+                onOpenHistory={onOpenExerciseHistory}
               />
             </View>
 
