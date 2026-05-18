@@ -59,7 +59,9 @@ If the scan hangs or shows "Network response timed out":
 <important if="planning-or-executing-implementation-work">
 - Plan first. Show file tree and full file contents before creating.
 - Wait for explicit approval before running build or install commands.
-- Never commit on the user's behalf. The user commits manually after verification.
+- Commit each finished phase on a feature branch — never on `main`. The user
+  reviews, verifies on-device, and merges. One commit per phase, voice rules
+  apply to the message.
 - After implementation, give a 30-second verification script the user can run on their phone.
 - Keep phases small and shippable. One concern per phase.
 </important>
