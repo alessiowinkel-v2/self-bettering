@@ -143,6 +143,38 @@ export async function logHabit(input: {
 }
 
 /**
+ * Insert a 'held' log for every date in [startDate, endDate] inclusive
+ * that has no existing row. NON-DESTRUCTIVE: ON CONFLICT DO NOTHING, so
+ * any real held/slipped log already on those days is left untouched.
+ * This is why logHabit can't be reused — it upserts and would overwrite.
+ *
+ * Used by the "Set streak" flow to materialize a declared pre-existing
+ * streak. The range is bounded by the caller (start is a user-picked
+ * date capped at today), so the day-by-day loop stays small. Wrapped in
+ * a transaction so a partial backfill can't leave a half-applied run.
+ */
+export async function backfillHeldLogs(input: {
+  habitId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<void> {
+  const db = await getDB();
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    let cursor = input.startDate;
+    while (cursor <= input.endDate) {
+      await db.runAsync(
+        `INSERT INTO habit_logs (id, habit_id, date, status, logged_at)
+         VALUES (?, ?, ?, 'held', ?)
+         ON CONFLICT(habit_id, date) DO NOTHING;`,
+        [habitLogId(input.habitId), input.habitId, cursor, now]
+      );
+      cursor = shiftIsoDate(cursor, 1);
+    }
+  });
+}
+
+/**
  * Current streak for a habit, walking backwards from `throughDate`. A
  * `held` log increments the streak; anything else (a `slipped` log OR a
  * day with no log) breaks it. The walk stops as soon as the streak breaks

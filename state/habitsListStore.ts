@@ -1,5 +1,9 @@
 import { create } from 'zustand';
-import { getLogsForDate, getStreakForHabit } from '../db/habitLogs';
+import {
+  backfillHeldLogs as dbBackfillHeldLogs,
+  getLogsForDate,
+  getStreakForHabit,
+} from '../db/habitLogs';
 import {
   archiveHabit as dbArchiveHabit,
   createHabit as dbCreateHabit,
@@ -7,6 +11,7 @@ import {
   reorderHabits as dbReorderHabits,
   restoreHabit as dbRestoreHabit,
   resumeHabit as dbResumeHabit,
+  setHabitCreatedOn as dbSetHabitCreatedOn,
   getActiveHabits,
   getArchivedHabits,
   getPausedHabits,
@@ -55,6 +60,7 @@ type HabitsListState = {
   archive: (id: string) => Promise<void>;
   restore: (id: string) => Promise<void>;
   create: (name: string) => Promise<void>;
+  setStreakStart: (id: string, startDate: string) => Promise<void>;
   reorder: (orderedIds: ReadonlyArray<string>) => Promise<void>;
 };
 
@@ -142,6 +148,20 @@ export const useHabitsListStore = create<HabitsListState>((set) => ({
   // (habits-list and today). Single-writer assumption holds.
   create: async (name) => {
     await dbCreateHabit({ name, createdOn: todayIso() });
+    await useHabitsListStore.getState().hydrate();
+    await useTodayStore.getState().hydrate();
+  },
+
+  // dual-hydrate: backfillHeldLogs materializes the run and
+  // setHabitCreatedOn widens the streak-walk lower bound. Backfill runs
+  // first, in its own transaction — if it fails, created_on is left
+  // untouched so the habit never points at a start with no logs behind
+  // it. Both touch rows Today also reads (streaks, today's logs), so
+  // both stores re-read; Habit Detail re-reads via its own focus effect.
+  setStreakStart: async (id, startDate) => {
+    const today = todayIso();
+    await dbBackfillHeldLogs({ habitId: id, startDate, endDate: today });
+    await dbSetHabitCreatedOn({ id, createdOn: startDate });
     await useHabitsListStore.getState().hydrate();
     await useTodayStore.getState().hydrate();
   },

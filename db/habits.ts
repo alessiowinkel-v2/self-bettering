@@ -114,6 +114,25 @@ export async function createHabit(input: {
   return { id, name: input.name, createdOn: input.createdOn };
 }
 
+/**
+ * Move a habit's created_on to an explicit (earlier or equal) date.
+ * Used by the "Set streak" flow: getStreakForHabit's backward walk is
+ * bounded below by created_on, so it must reach back to the streak's
+ * start before backfilled held logs can count. Backfilling the logs
+ * themselves is a separate call (backfillHeldLogs); this only widens
+ * the walk's lower bound.
+ */
+export async function setHabitCreatedOn(input: {
+  id: string;
+  createdOn: string;
+}): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `UPDATE habits SET created_on = ? WHERE id = ?;`,
+    [input.createdOn, input.id]
+  );
+}
+
 /** Mark a habit paused. The timestamp doubles as the "paused since" date. */
 export async function pauseHabit(id: string): Promise<void> {
   const db = await getDB();

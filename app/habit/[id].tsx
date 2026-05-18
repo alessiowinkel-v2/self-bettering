@@ -1,5 +1,10 @@
 import { useHeaderHeight } from '@react-navigation/elements';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import {
@@ -182,6 +187,18 @@ export default function HabitDetailScreen() {
     );
   }, [id, fetchSnapshot]);
 
+  // Re-fetch on focus so the return trip from the Set-streak modal
+  // picks up the new streak. The modal navigates away and back, so the
+  // mount effect (same id) does not re-run and would leave the snapshot
+  // stale. refresh() never sets the loading state, so the redundant
+  // first-mount fire is one cheap read with no flicker. cancelledRef
+  // already guards refresh() against post-unmount setState.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
+
   const onPause = useCallback(async () => {
     if (id === null) return;
     await useHabitsListStore.getState().pause(id);
@@ -204,6 +221,11 @@ export default function HabitDetailScreen() {
     if (id === null) return;
     await useHabitsListStore.getState().restore(id);
     router.back();
+  }, [id, router]);
+
+  const onSetStreak = useCallback(() => {
+    if (id === null) return;
+    router.push({ pathname: '/habit/set-streak', params: { id } });
   }, [id, router]);
 
   // Pad the top of the body so the title clears the system back
@@ -336,6 +358,12 @@ export default function HabitDetailScreen() {
           />
         ) : (
           <>
+            <TextButton
+              label="Set streak"
+              tone="secondary"
+              onPress={onSetStreak}
+              accessibilityLabel={`Set streak start for ${s.habit.name}`}
+            />
             {isPaused ? (
               <TextButton
                 label="Resume"

@@ -3,7 +3,7 @@
  * not the call site, so the conventions stay consistent across modules.
  *
  *   habits             h-${slug}-${ts36}
- *   habit_logs         hl-${ts36}-${habitId-tail}
+ *   habit_logs         hl-${ts36}-${habitId-tail}-${rand4}
  *   journal_entries    j-${dateStr}            (date is the natural key)
  *   workouts           w-${ts36}
  *   sets               s-${ts36}-${setNum}-${rand4}
@@ -46,7 +46,11 @@ export function habitId(name: string): string {
 export function habitLogId(habitIdValue: string): string {
   // Tail of the habit id keeps debugging readable without bloating the row.
   const tail = habitIdValue.slice(-6);
-  return `hl-${ts36()}-${tail}`;
+  // rand4 for the same reason setId carries it: backfillHeldLogs issues a
+  // tight async loop of inserts, many landing within one millisecond, so
+  // ts36 + tail alone collide on the PK. UNIQUE(habit_id, date) still
+  // catches logical duplicates; rand4 protects the id column.
+  return `hl-${ts36()}-${tail}-${rand4()}`;
 }
 
 export function journalEntryId(dateStr: string): string {

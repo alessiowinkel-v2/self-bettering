@@ -122,6 +122,10 @@ function RootStack() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add-habit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="habit/[id]" />
+        <Stack.Screen
+          name="habit/set-streak"
+          options={{ presentation: 'modal' }}
+        />
         <Stack.Screen name="journal/[date]" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="routine/new" options={{ presentation: 'modal' }} />
