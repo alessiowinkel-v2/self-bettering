@@ -9,6 +9,7 @@ import {
   ListRow,
   Screen,
   SectionHeader,
+  Stepper,
   Text,
 } from '../components/primitives';
 import { wipeAllData } from '../db/wipe';
@@ -20,6 +21,7 @@ import { useTheme, useThemeStore } from '../theme';
 import { runExportFlow } from '../utils/export';
 import { haptics } from '../utils/haptics';
 import { ensurePermission, syncCheckInNotifications } from '../utils/notifications';
+import { formatRest } from '../utils/workout';
 import type { ThemeOverride } from '../theme';
 
 /**
@@ -28,10 +30,12 @@ import type { ThemeOverride } from '../theme';
  * Sections (Fraunces section heads, rows below):
  *   1. Appearance — theme selector (always-visible three-button row).
  *   2. Notifications — morning check-in, evening check-in, rest timer
- *      alerts switch. The two check-in times schedule daily local
- *      notifications via `utils/notifications`: enabling one requests
- *      OS permission, and any change reconciles the schedule (debounced
- *      against the picker's per-tick onChange).
+ *      alerts switch, default rest duration. The two check-in times
+ *      schedule daily local notifications via `utils/notifications`:
+ *      enabling one requests OS permission, and any change reconciles
+ *      the schedule (debounced against the picker's per-tick onChange).
+ *      Default rest feeds workout exercises that have no per-exercise
+ *      rest override.
  *   3. Data — Export to JSON, Clear all data (destructive). Import is
  *      omitted entirely until Phase 4 — no disabled-row stub.
  *   4. About — Version row. No credit line.
@@ -67,6 +71,12 @@ export default function SettingsScreen() {
   const setEveningCheckInTimeRaw = useSettingsStore((s) => s.setEveningCheckInTime);
   const restTimerAlerts = useSettingsStore((s) => s.restTimerAlerts);
   const setRestTimerAlertsRaw = useSettingsStore((s) => s.setRestTimerAlerts);
+  const defaultRestDurationSeconds = useSettingsStore(
+    (s) => s.defaultRestDurationSeconds,
+  );
+  const setDefaultRestDurationSeconds = useSettingsStore(
+    (s) => s.setDefaultRestDurationSeconds,
+  );
 
   // Haptic-wrapped commits. Theme tap, switch toggle, and the
   // null<->time transitions on check-in rows each fire light() — small,
@@ -172,6 +182,18 @@ export default function SettingsScreen() {
       setRestTimerAlertsRaw(next);
     },
     [setRestTimerAlertsRaw],
+  );
+
+  // Default rest duration: 30s steps, clamped to 30s–5:00. Used by any
+  // workout exercise that has no per-exercise rest override.
+  const onStepDefaultRest = useCallback(
+    (delta: 1 | -1) => {
+      haptics.light();
+      const cur = useSettingsStore.getState().defaultRestDurationSeconds;
+      const next = Math.min(300, Math.max(30, cur + delta * 30));
+      if (next !== cur) setDefaultRestDurationSeconds(next);
+    },
+    [setDefaultRestDurationSeconds],
   );
 
   const version = useMemo(() => {
@@ -287,6 +309,22 @@ export default function SettingsScreen() {
               thumbColor={theme.colors.textPrimary}
               ios_backgroundColor={theme.colors.surfaceElev}
               accessibilityLabel="Rest timer alerts"
+            />
+          }
+        />
+        <ListRow
+          index={3}
+          left={<Text variant="body">Default rest</Text>}
+          right={
+            <Stepper
+              display={formatRest(defaultRestDurationSeconds)}
+              onDecrement={() => onStepDefaultRest(-1)}
+              onIncrement={() => onStepDefaultRest(1)}
+              decrementDisabled={defaultRestDurationSeconds <= 30}
+              incrementDisabled={defaultRestDurationSeconds >= 300}
+              decrementAccessibilityLabel="Decrease default rest"
+              incrementAccessibilityLabel="Increase default rest"
+              valueMinWidth={48}
             />
           }
         />

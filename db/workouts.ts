@@ -44,6 +44,17 @@ function isWorkoutTemplateExercise(e: unknown): e is WorkoutTemplateExercise {
   if (typeof obj.repRange[0] !== 'number' || typeof obj.repRange[1] !== 'number') {
     return false;
   }
+  // restDurationSeconds is optional (added Phase 4). When present it
+  // must be a non-negative finite number; rows written before the
+  // field existed simply omit it and fall back to the Settings default.
+  if (
+    obj.restDurationSeconds !== undefined &&
+    (typeof obj.restDurationSeconds !== 'number' ||
+      !Number.isFinite(obj.restDurationSeconds) ||
+      obj.restDurationSeconds < 0)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -219,6 +230,17 @@ export async function completeWorkout(input: {
       WHERE id = ?;`,
     [completedAt, input.durationSeconds, input.id]
   );
+}
+
+/**
+ * Delete a workout and its sets outright. Used by the "Discard" exit
+ * option on the Active Workout screen — the session is thrown away,
+ * nothing is recorded. CASCADE on sets.workout_id wipes the set rows,
+ * same as cleanupOrphanWorkouts relies on.
+ */
+export async function discardWorkout(id: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`DELETE FROM workouts WHERE id = ?;`, [id]);
 }
 
 /**

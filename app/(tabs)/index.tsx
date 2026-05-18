@@ -48,9 +48,9 @@ import { haptics } from '../../utils/haptics';
  *
  * Phase 2b: Held / Slipped writes go through the DB via the store's
  * logHabit action; the store is a hydration cache populated on boot.
- * The streak chip number is the streak as of end-of-yesterday — today's
- * hold or slip does not change it. Visual feedback for today's status is
- * the card collapsing to "HELD" or "SLIPPED", not the number moving.
+ * Both the habit card and the Streaks chip show `displayStreak` — the
+ * live streak including today's status — so holding a habit advances
+ * its chip in step with its card and the Habit Detail screen.
  */
 export default function TodayScreen() {
   const theme = useTheme();
@@ -121,10 +121,8 @@ export default function TodayScreen() {
         // displayStreak reflects today's status live so the card's
         // number ticks N → N+1 on Held (AnimatedStreakNumber animates
         // the transition) and resets to 0 on Slipped (no animation per
-        // spec — the card collapses to SLIPPED anyway). The chips row
-        // intentionally reads streakThroughYesterday so it stays put;
-        // the chips are a glanceable summary, the card is the surface
-        // where the commit happened.
+        // spec — the card collapses to SLIPPED anyway). The Streaks
+        // chips read the same value, so they advance in lockstep.
         const displayStreak =
           status === 'held'
             ? streakThroughYesterday + 1
@@ -159,9 +157,9 @@ export default function TodayScreen() {
       habitsWithStatus.map((row) => ({
         habitId: row.habit.id,
         name: abbreviateHabitName(row.habit.name),
-        streak: row.streakThroughYesterday,
+        streak: row.displayStreak,
         active:
-          row.status === 'held' || (row.status === null && row.streakThroughYesterday > 0),
+          row.status === 'held' || (row.status === null && row.displayStreak > 0),
       })),
     [habitsWithStatus],
   );

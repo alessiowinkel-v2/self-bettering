@@ -106,6 +106,7 @@ export default function WorkoutScreen() {
   );
   const completeAndSave = useActiveWorkoutStore((s) => s.completeAndSave);
   const abandon = useActiveWorkoutStore((s) => s.abandon);
+  const discard = useActiveWorkoutStore((s) => s.discard);
   const reset = useActiveWorkoutStore((s) => s.reset);
   const resetToIdle = useActiveWorkoutStore((s) => s.resetToIdle);
 
@@ -354,24 +355,41 @@ export default function WorkoutScreen() {
       router.back();
       return;
     }
+    // Three exits. Pause keeps the session as a resumable orphan;
+    // Save and end finalizes it (counts in history); Discard deletes
+    // it. onSave already does completeAndSave + re-hydrate + pop.
     Alert.alert(
       'End workout.',
-      'Sets logged so far are kept.',
+      undefined,
       [
-        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'End',
-          style: 'destructive',
+          text: 'Pause',
           onPress: async () => {
             haptics.medium();
             await abandon();
             router.back();
           },
         },
+        {
+          text: 'Save and end',
+          onPress: () => {
+            void onSave();
+          },
+        },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            haptics.warning();
+            await discard();
+            router.back();
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true },
     );
-  }, [status, router, abandon]);
+  }, [status, router, abandon, discard, onSave]);
 
   // Reset the store if the screen unmounts in a non-final state
   // (Fast Refresh, force-quit, JS reload). We don't auto-abandon — a

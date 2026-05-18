@@ -7,11 +7,13 @@ import {
 } from '../db/sets';
 import {
   completeWorkout,
+  discardWorkout,
   getWorkoutTemplates,
   startWorkout,
   type ResumableOrphan,
 } from '../db/workouts';
 import { haptics } from '../utils/haptics';
+import { useSettingsStore } from './settingsStore';
 import type { WorkoutTemplate } from './types';
 
 /**
@@ -33,8 +35,10 @@ import type { WorkoutTemplate } from './types';
  *                                  status flips to 'done' iff last
  *                                  set of last exercise was logged
  *   completeAndSave()            → completed_at + duration_seconds
- *                                  written; store reset; caller pops
- *   abandon()                    → workout row + sets deleted via
+ *                                  written; status stays 'done'; caller pops
+ *   abandon()                    → store reset only; the workout row
+ *                                  stays on disk as a resumable orphan
+ *   discard()                    → workout row + sets deleted via
  *                                  CASCADE; store reset; caller pops
  */
 
@@ -50,6 +54,11 @@ export type ExerciseProgress = {
   name: string;
   setCount: number;
   repRange: readonly [number, number];
+  /**
+   * Per-exercise rest override in seconds, carried from the template.
+   * `undefined` → fall back to the Settings default; `0` → no rest.
+   */
+  restDurationSeconds?: number;
   /**
    * Sets pulled from the most recent prior completed workout that
    * contained this exercise. Empty array means "first time this
@@ -131,7 +140,17 @@ type ActiveWorkoutState = {
    * the slot to 'idle' on the next /workout open via `resetToIdle`.
    */
   completeAndSave: () => Promise<void>;
+  /**
+   * Stop the session without finishing it. Resets the store only — the
+   * workout row stays on disk with `completed_at IS NULL`, so it can be
+   * resumed (or is GC'd after 24h by cleanupOrphanWorkouts).
+   */
   abandon: () => Promise<void>;
+  /**
+   * Throw the session away. Deletes the workout row + its sets, then
+   * resets the store. Nothing is recorded.
+   */
+  discard: () => Promise<void>;
   /**
    * Reset the active-workout slice to `initialState`. The screen's
    * mount effect calls this once on each open iff the current status
@@ -141,9 +160,6 @@ type ActiveWorkoutState = {
   resetToIdle: () => void;
   reset: () => void;
 };
-
-/** Default rest duration in seconds. Phase 4+ may make this per-exercise. */
-export const DEFAULT_REST_SECONDS = 90;
 
 const initialState = {
   status: 'idle' as ActiveWorkoutStatus,
@@ -201,6 +217,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
         name: ex.name,
         setCount: ex.setCount,
         repRange: ex.repRange,
+        restDurationSeconds: ex.restDurationSeconds,
         lastSets: lastSetsPerExercise[i],
         loggedSets: [],
       }),
@@ -268,6 +285,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
         name: ex.name,
         setCount: ex.setCount,
         repRange: ex.repRange,
+        restDurationSeconds: ex.restDurationSeconds,
         lastSets: lastSetsPerExercise[i],
         loggedSets: loggedByExercise.get(ex.name) ?? [],
       }),
@@ -339,9 +357,16 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
     // is suppressed in that case — the user is about to see the Done
     // takeover, a rest countdown would be noise.
     const isComplete = currentExerciseIndex >= state.exercises.length;
-    const restEndsAt = isComplete
-      ? null
-      : Date.now() + DEFAULT_REST_SECONDS * 1000;
+    // Rest length: the just-logged exercise's override, or the Settings
+    // default when it has none. A duration of 0 means "no rest" — arm
+    // nothing, same as the complete case.
+    const restSeconds =
+      exercise.restDurationSeconds ??
+      useSettingsStore.getState().defaultRestDurationSeconds;
+    const restEndsAt =
+      isComplete || restSeconds <= 0
+        ? null
+        : Date.now() + restSeconds * 1000;
 
     set({
       exercises,
@@ -440,12 +465,18 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
     // Reset the active slice but leave the workout row on disk. Sets
     // logged so far are preserved as an orphan workout (completed_at
     // IS NULL); the 24h boot-cleanup in cleanupOrphanWorkouts will
-    // GC the row if it's never resumed. Phase 4 will surface
-    // resumable orphans on Gym Home.
+    // GC the row if it's never resumed.
     //
-    // This is what the "End workout." Alert promises ("Sets logged
-    // so far are kept.") — abandon stops the session without
-    // destroying data.
+    // This backs the "Pause" exit option — the session stops but the
+    // data survives and can be resumed.
+    set(initialState);
+  },
+
+  discard: async () => {
+    // Delete the workout row outright (sets cascade) and reset. Backs
+    // the "Discard" exit option — unlike abandon, nothing survives.
+    const { workoutId } = get();
+    if (workoutId !== null) await discardWorkout(workoutId);
     set(initialState);
   },
 

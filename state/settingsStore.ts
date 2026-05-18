@@ -33,10 +33,16 @@ type SettingsStoreState = {
   morningCheckInTime: CheckInTime;
   eveningCheckInTime: CheckInTime;
   restTimerAlerts: boolean;
+  /**
+   * Rest-timer duration (seconds) used for any workout exercise that
+   * has no per-exercise `restDurationSeconds`. Defaults to 90.
+   */
+  defaultRestDurationSeconds: number;
   _hasHydrated: boolean;
   setMorningCheckInTime: (next: CheckInTime) => void;
   setEveningCheckInTime: (next: CheckInTime) => void;
   setRestTimerAlerts: (next: boolean) => void;
+  setDefaultRestDurationSeconds: (next: number) => void;
   _setHasHydrated: (value: boolean) => void;
 };
 
@@ -46,10 +52,13 @@ export const useSettingsStore = create<SettingsStoreState>()(
       morningCheckInTime: null,
       eveningCheckInTime: null,
       restTimerAlerts: true,
+      defaultRestDurationSeconds: 90,
       _hasHydrated: false,
       setMorningCheckInTime: (next) => set({ morningCheckInTime: next }),
       setEveningCheckInTime: (next) => set({ eveningCheckInTime: next }),
       setRestTimerAlerts: (next) => set({ restTimerAlerts: next }),
+      setDefaultRestDurationSeconds: (next) =>
+        set({ defaultRestDurationSeconds: next }),
       _setHasHydrated: (value) => set({ _hasHydrated: value }),
     }),
     {
@@ -59,6 +68,7 @@ export const useSettingsStore = create<SettingsStoreState>()(
         morningCheckInTime: state.morningCheckInTime,
         eveningCheckInTime: state.eveningCheckInTime,
         restTimerAlerts: state.restTimerAlerts,
+        defaultRestDurationSeconds: state.defaultRestDurationSeconds,
       }),
       onRehydrateStorage: () => (state) => {
         state?._setHasHydrated(true);

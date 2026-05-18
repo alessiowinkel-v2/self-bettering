@@ -52,6 +52,12 @@ export type WorkoutTemplateExercise = {
   setCount: number;
   /** [min, max] inclusive rep range. */
   repRange: readonly [number, number];
+  /**
+   * Rest-timer duration in seconds for this exercise. Omitted means
+   * "use the Settings default" (`defaultRestDurationSeconds`); `0`
+   * means no rest timer. Set per occurrence in the routine editor.
+   */
+  restDurationSeconds?: number;
 };
 
 export type WorkoutTemplate = {

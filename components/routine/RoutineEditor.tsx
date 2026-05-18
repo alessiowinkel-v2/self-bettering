@@ -1,4 +1,4 @@
-import { GripVertical, Minus, Plus } from 'lucide-react-native';
+import { GripVertical } from 'lucide-react-native';
 import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
@@ -11,11 +11,12 @@ import DraggableFlatList, {
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import { Pressable, Swipeable } from 'react-native-gesture-handler';
-import { Screen, Text, TextButton } from '../primitives';
+import { Screen, Stepper, Text, TextButton } from '../primitives';
 import { ExercisePicker } from '../workout/ExercisePicker';
 import type { WorkoutTemplateExercise } from '../../state/types';
 import { useTheme } from '../../theme';
 import { haptics } from '../../utils/haptics';
+import { formatRest } from '../../utils/workout';
 
 /**
  * RoutineEditor — shared body of the Add Routine and Edit Routine modal
@@ -67,6 +68,25 @@ const DEFAULT_SET_COUNT = 3;
 // the need surfaces; deferred.
 const DEFAULT_REP_RANGE: readonly [number, number] = [5, 8];
 
+// Per-exercise rest stepper. Steps in 30s; `undefined` (the floor,
+// below 0:00) means "use the Settings default". Stepping up from there
+// lands on 0:00 (no rest), then 0:30, 1:00, ... up to MAX_REST.
+const REST_STEP = 30;
+const MAX_REST = 300;
+
+/** Next rest value when the per-exercise stepper is pressed. */
+function stepRest(
+  current: number | undefined,
+  delta: 1 | -1,
+): number | undefined {
+  if (delta === 1) {
+    if (current === undefined) return 0;
+    return Math.min(MAX_REST, current + REST_STEP);
+  }
+  if (current === undefined || current <= 0) return undefined;
+  return current - REST_STEP;
+}
+
 export function RoutineEditor({
   mode,
   initialRoutine,
@@ -110,6 +130,21 @@ export function RoutineEditor({
           );
           if (next === ex.setCount) return ex;
           return { ...ex, setCount: next };
+        })
+      );
+    },
+    []
+  );
+
+  const onRestStep = useCallback(
+    (index: number, delta: 1 | -1) => {
+      haptics.light();
+      setExercises((prev) =>
+        prev.map((ex, i) => {
+          if (i !== index) return ex;
+          const next = stepRest(ex.restDurationSeconds, delta);
+          if (next === ex.restDurationSeconds) return ex;
+          return { ...ex, restDurationSeconds: next };
         })
       );
     },
@@ -168,11 +203,12 @@ export function RoutineEditor({
           }}
           onLongPressInReorder={drag}
           onStep={onStep}
+          onRestStep={onRestStep}
           onRemove={onRemove}
         />
       );
     },
-    [isReorderMode, onStep, onRemove]
+    [isReorderMode, onStep, onRestStep, onRemove]
   );
 
   return (
@@ -307,14 +343,18 @@ type ExerciseEditorRowProps = {
   onEnterReorderMode: () => void;
   onLongPressInReorder: () => void;
   onStep: (index: number, delta: 1 | -1) => void;
+  onRestStep: (index: number, delta: 1 | -1) => void;
   onRemove: (index: number) => void;
 };
 
 /**
  * One row in the editor's exercise list. Two visual modes:
- *   - normal:   ordinal · name · stepper. Swipe-left reveals Remove.
- *   - reorder:  ordinal · name · grip handle. All rows at 0.5 opacity
- *               except the currently-lifted row.
+ *   - normal:   line 1 ordinal · name · set-count stepper;
+ *               line 2 indented "Rest" · rest stepper.
+ *               Swipe-left reveals Remove.
+ *   - reorder:  single line ordinal · name · grip handle. All rows at
+ *               0.5 opacity except the currently-lifted row; the rest
+ *               line is hidden (reorder is about order, not editing).
  *
  * Long-press semantics:
  *   - normal mode  → first long-press enters reorder mode (caller fires
@@ -335,6 +375,7 @@ function ExerciseEditorRow({
   onEnterReorderMode,
   onLongPressInReorder,
   onStep,
+  onRestStep,
   onRemove,
 }: ExerciseEditorRowProps) {
   const theme = useTheme();
@@ -345,6 +386,10 @@ function ExerciseEditorRow({
   const rowOpacity = isReorderMode ? (isActiveDrag ? 1 : 0.5) : 1;
   const rowBg = isActiveDrag ? theme.colors.surfaceElev : theme.colors.bg;
 
+  // Indent the rest line so it aligns under the exercise name (past
+  // the fixed-width ordinal + the line-1 gap).
+  const restIndent = 20 + theme.spacing[3];
+
   const inner = (
     <Pressable
       onLongPress={onLongPress}
@@ -354,9 +399,8 @@ function ExerciseEditorRow({
           paddingVertical: theme.spacing[3],
           paddingHorizontal: theme.spacing[2],
           minHeight: theme.touchTarget.minHeight,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.spacing[3],
+          flexDirection: 'column',
+          gap: theme.spacing[2],
           backgroundColor: rowBg,
           opacity: rowOpacity,
         },
@@ -369,61 +413,71 @@ function ExerciseEditorRow({
           : `${item.name}, ${item.setCount} sets. Long-press to reorder.`
       }
     >
-      <Text
-        variant="body"
-        tone="tertiary"
-        style={{ width: 20, fontVariant: ['tabular-nums'] }}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: theme.spacing[3],
+        }}
       >
-        {index + 1}
-      </Text>
-      <View style={{ flex: 1 }}>
-        <Text variant="body">{item.name}</Text>
+        <Text
+          variant="body"
+          tone="tertiary"
+          style={{ width: 20, fontVariant: ['tabular-nums'] }}
+        >
+          {index + 1}
+        </Text>
+        <View style={{ flex: 1 }}>
+          <Text variant="body">{item.name}</Text>
+        </View>
+        {isReorderMode ? (
+          <GripVertical
+            size={20}
+            color={theme.colors.textTertiary}
+            strokeWidth={1.5}
+          />
+        ) : (
+          <Stepper
+            display={String(item.setCount)}
+            onDecrement={() => onStep(index, -1)}
+            onIncrement={() => onStep(index, 1)}
+            decrementDisabled={item.setCount <= MIN_SETS}
+            incrementDisabled={item.setCount >= MAX_SETS}
+            label="sets"
+            decrementAccessibilityLabel={`Decrease sets for ${item.name}`}
+            incrementAccessibilityLabel={`Increase sets for ${item.name}`}
+          />
+        )}
       </View>
-      {isReorderMode ? (
-        <GripVertical
-          size={20}
-          color={theme.colors.textTertiary}
-          strokeWidth={1.5}
-        />
-      ) : (
+
+      {!isReorderMode ? (
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            gap: theme.spacing[2],
+            justifyContent: 'space-between',
+            paddingLeft: restIndent,
           }}
         >
-          <StepperButton
-            icon="minus"
-            onPress={() => onStep(index, -1)}
-            disabled={item.setCount <= MIN_SETS}
-            accessibilityLabel={`Decrease sets for ${item.name}`}
-          />
-          <Text
-            variant="bodyMedium"
-            style={{
-              minWidth: 16,
-              textAlign: 'center',
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {item.setCount}
+          <Text variant="caption" tone="tertiary">
+            Rest
           </Text>
-          <StepperButton
-            icon="plus"
-            onPress={() => onStep(index, 1)}
-            disabled={item.setCount >= MAX_SETS}
-            accessibilityLabel={`Increase sets for ${item.name}`}
+          <Stepper
+            display={
+              item.restDurationSeconds === undefined
+                ? 'Default'
+                : formatRest(item.restDurationSeconds)
+            }
+            onDecrement={() => onRestStep(index, -1)}
+            onIncrement={() => onRestStep(index, 1)}
+            decrementDisabled={item.restDurationSeconds === undefined}
+            incrementDisabled={item.restDurationSeconds === MAX_REST}
+            decrementAccessibilityLabel={`Decrease rest for ${item.name}`}
+            incrementAccessibilityLabel={`Increase rest for ${item.name}`}
+            valueMinWidth={56}
           />
-          <Text
-            variant="caption"
-            tone="tertiary"
-            style={{ marginLeft: theme.spacing[1] }}
-          >
-            sets
-          </Text>
         </View>
-      )}
+      ) : null}
     </Pressable>
   );
 
@@ -456,49 +510,5 @@ function ExerciseEditorRow({
     <Swipeable ref={swipeableRef} renderRightActions={renderRightActions}>
       {inner}
     </Swipeable>
-  );
-}
-
-type StepperButtonProps = {
-  icon: 'plus' | 'minus';
-  onPress: () => void;
-  disabled: boolean;
-  accessibilityLabel: string;
-};
-
-function StepperButton({
-  icon,
-  onPress,
-  disabled,
-  accessibilityLabel,
-}: StepperButtonProps) {
-  const theme = useTheme();
-  const Icon = icon === 'plus' ? Plus : Minus;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [
-        {
-          width: 32,
-          height: 32,
-          borderRadius: theme.radii.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: theme.colors.surface,
-        },
-        pressed && !disabled && { opacity: 0.7 },
-        disabled && { opacity: 0.4 },
-      ]}
-    >
-      <Icon
-        size={16}
-        color={theme.colors.textPrimary}
-        strokeWidth={1.75}
-      />
-    </Pressable>
   );
 }
