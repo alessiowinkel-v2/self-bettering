@@ -1,5 +1,10 @@
 import { Minus, Plus } from 'lucide-react-native';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
+// Pressable from gesture-handler, NOT react-native: this stepper renders
+// inside gesture-handler <Pressable> rows (the routine editor's
+// long-press-to-reorder rows). A plain RN Pressable nested there never
+// receives the tap — the gesture-handler parent claims the touch.
+import { Pressable } from 'react-native-gesture-handler';
 import { useTheme } from '../../theme';
 import { Text } from './Text';
 
