@@ -23,15 +23,13 @@ import { getWeekRange } from '../utils/gymHome';
 
 type GymHomeState = {
   templates: ReadonlyArray<WorkoutTemplateWithLast>;
-  /** ID of the routine the user should start next (rotation_order, name). */
-  nextTemplateId: string | null;
   /** ISO dates within the current Mon–Sun week that had a workout. */
   completedDatesThisWeek: ReadonlyArray<string>;
   /**
-   * Count of distinct routines whose most recent completion falls within
+   * Count of distinct workouts whose most recent completion falls within
    * the current Mon–Sun week. Drives the "X of N done this week." caption.
-   * A routine done Mon and Fri still counts as one — the metric tracks
-   * rotation coverage, not session frequency.
+   * A workout done Mon and Fri still counts as one — the metric tracks
+   * how much of the list has been touched, not session frequency.
    */
   routinesCompletedThisWeek: number;
   /** Reference date the store was hydrated against. */
@@ -43,7 +41,6 @@ type GymHomeState = {
 
 export const useGymHomeStore = create<GymHomeState>((set) => ({
   templates: [],
-  nextTemplateId: null,
   completedDatesThisWeek: [],
   routinesCompletedThisWeek: 0,
   referenceDate: todayIso(),
@@ -55,9 +52,6 @@ export const useGymHomeStore = create<GymHomeState>((set) => ({
     const today = todayIso();
     const { start, end } = getWeekRange(today);
 
-    // Next-up is provably the first row of getWorkoutTemplatesWithLastCompleted:
-    // both queries sort by rotation_order ASC, name ASC. Reading once
-    // saves a redundant SQLite round-trip.
     const [templates, completedDatesThisWeek] = await Promise.all([
       getWorkoutTemplatesWithLastCompleted(),
       getCompletedWorkoutDatesInRange({ startDate: start, endDate: end }),
@@ -75,7 +69,6 @@ export const useGymHomeStore = create<GymHomeState>((set) => ({
 
     set({
       templates,
-      nextTemplateId: templates[0]?.template.id ?? null,
       completedDatesThisWeek,
       routinesCompletedThisWeek,
       referenceDate: today,

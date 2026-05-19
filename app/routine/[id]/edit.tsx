@@ -1,17 +1,21 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { RoutineEditor, type RoutineDraft } from '../../components/routine';
-import { getWorkoutTemplate, updateWorkoutTemplate } from '../../db/workouts';
-import { useGymHomeStore } from '../../state/gymHomeStore';
+import { RoutineEditor, type RoutineDraft } from '../../../components/routine';
+import { getWorkoutTemplate, updateWorkoutTemplate } from '../../../db/workouts';
+import { useGymHomeStore } from '../../../state/gymHomeStore';
 
 /**
- * Edit Routine — modal route reached by tapping a routine row on Gym
- * Home. Loads the template by id, hands the loaded shape to
- * RoutineEditor, and writes back on save via updateWorkoutTemplate.
+ * Edit Workout — modal route reached from the workout detail screen's
+ * "Edit" affordance. Loads the template by id, hands the loaded shape
+ * to RoutineEditor, and writes back on save via updateWorkoutTemplate.
  *
- * If the id doesn't resolve (e.g. the routine was deleted in another
+ * If the id doesn't resolve (e.g. the workout was deleted in another
  * tab between the tap and the mount), we pop back immediately — there's
  * nothing to edit.
+ *
+ * On save, the Gym Home store is re-hydrated and we pop back to the
+ * detail screen, which reads its template from that store and so picks
+ * up the edit without its own refresh.
  */
 export default function EditRoutineModal() {
   const router = useRouter();
@@ -56,8 +60,8 @@ export default function EditRoutineModal() {
 
   if (!loaded || !initialRoutine) {
     // Render nothing until the load resolves. The modal sheet is already
-    // animating in over Gym Home; a brief blank beats a flash of an
-    // empty editor that then snaps to filled.
+    // animating in over the detail screen; a brief blank beats a flash
+    // of an empty editor that then snaps to filled.
     return null;
   }
 

@@ -81,22 +81,6 @@ export async function getWorkoutTemplates(): Promise<ReadonlyArray<WorkoutTempla
   return rows.map(rowToTemplate);
 }
 
-/**
- * Next routine in the rotation. Phase 3's Active Workout will replace
- * this with real least-recently-completed semantics; this column is
- * the Phase 2b stand-in.
- */
-export async function getNextWorkoutTemplate(): Promise<WorkoutTemplate | null> {
-  const db = await getDB();
-  const row = await db.getFirstAsync<WorkoutTemplateRow>(
-    `SELECT id, name, exercises
-       FROM workout_templates
-      ORDER BY rotation_order ASC, name ASC
-      LIMIT 1;`
-  );
-  return row ? rowToTemplate(row) : null;
-}
-
 export async function insertWorkoutTemplate(
   template: WorkoutTemplate
 ): Promise<void> {
@@ -108,20 +92,10 @@ export async function insertWorkoutTemplate(
 }
 
 /**
- * Create a new routine from the editor. Lands at the bottom of the
- * rotation (MAX(rotation_order)+1) so it surfaces in the routine list
- * without disturbing the next-up order of existing routines.
- *
- * Differs from insertWorkoutTemplate (which preserves the caller's id and
- * leaves rotation_order at its default 0) in two ways:
- *   1. Generates a `wt-${slug}-${ts36}` id locally
- *   2. Sets rotation_order in the same statement so the new routine sits
- *      after every existing one
- *
- * The transaction wrapper isn't strictly necessary for a single INSERT,
- * but it matches updateWorkoutTemplate's shape and pins the
- * MAX(rotation_order) subselect to the same logical moment as the insert
- * — defensive against a hypothetical concurrent writer.
+ * Create a new workout from the editor. Differs from
+ * insertWorkoutTemplate (which preserves the caller's id) in that it
+ * generates a `wt-${slug}-${ts36}` id locally. The Workouts list is
+ * ordered by name, so a new workout slots in alphabetically.
  */
 export async function createWorkoutTemplate(input: {
   name: string;
@@ -130,19 +104,14 @@ export async function createWorkoutTemplate(input: {
   const db = await getDB();
   const id = templateId(input.name);
   await db.runAsync(
-    `INSERT INTO workout_templates (id, name, exercises, rotation_order)
-     VALUES (
-       ?, ?, ?,
-       COALESCE((SELECT MAX(rotation_order) FROM workout_templates), 0) + 1
-     );`,
+    `INSERT INTO workout_templates (id, name, exercises) VALUES (?, ?, ?);`,
     [id, input.name, JSON.stringify(input.exercises)]
   );
   return { id, name: input.name, exercises: input.exercises };
 }
 
 /**
- * Rewrite a routine's name + exercises in place. Sets rotation_order
- * is untouched so the routine keeps its position in the rotation.
+ * Rewrite a workout's name + exercises in place.
  *
  * The prompt called out a delete-and-reinsert pattern against a separate
  * template_exercises table, but the actual schema stores exercises as
@@ -274,17 +243,14 @@ export async function cleanupOrphanWorkouts(): Promise<void> {
 }
 
 /**
- * Returns every routine paired with the date it was most recently
+ * Returns every workout paired with the date it was most recently
  * completed. Correlated MAX (per-template) preserves never-completed
  * templates as `lastCompletedDate: null` — LEFT-JOIN-equivalent
  * semantics. Versus a GROUP BY subquery, this lets the outer query
  * keep the natural template ordering and avoids shuffling join keys
  * around.
  *
- * Ordering: rotation_order ASC, name ASC. Same ORDER BY key as
- * getNextWorkoutTemplate, so Today's next-up (which still calls
- * getNextWorkoutTemplate) and Gym Home's next-up (which derives from
- * templates[0]) agree by construction.
+ * Ordering: name ASC — the Gym tab lists workouts alphabetically.
  */
 export async function getWorkoutTemplatesWithLastCompleted(): Promise<
   ReadonlyArray<WorkoutTemplateWithLast>
@@ -301,7 +267,7 @@ export async function getWorkoutTemplatesWithLastCompleted(): Promise<
               WHERE w.template_id = t.id
                 AND w.completed_at IS NOT NULL) AS last_completed_at
        FROM workout_templates t
-      ORDER BY t.rotation_order ASC, t.name ASC;`
+      ORDER BY t.name ASC;`
   );
   return rows.map((row) => ({
     template: rowToTemplate(row),

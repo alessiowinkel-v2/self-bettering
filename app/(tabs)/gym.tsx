@@ -9,33 +9,38 @@ import {
   TextButton,
   WeekDots,
 } from '../../components/primitives';
-import { NextWorkoutCard } from '../../components/workout';
+import { ResumeWorkoutCard } from '../../components/workout';
 import { getMostRecentOrphan, type ResumableOrphan } from '../../db/workouts';
 import { useGymHomeStore } from '../../state/gymHomeStore';
 import { useTheme } from '../../theme';
 import { buildGymWeekDots, formatRelativeDate } from '../../utils/gymHome';
 
 /**
- * Gym tab — Gym Home. Vertical order from the design PDF:
+ * Gym tab. Vertical order:
  *   1. "Gym." title
- *   2. "Up next" section: NextWorkoutCard (when a next routine exists)
+ *   2. "In progress" section: the resume card, only when a workout is
+ *      mid-session (orphan)
  *   3. "This week" section: WeekDots + "X of N done this week" caption
- *   4. "Routines" section: RoutineRow list + "+ Add routine" link
+ *   4. "Workouts" section: RoutineRow list + "+ Add workout" link
  *
- * First-time empty (no routines anywhere) replaces the body with
- * GymEmpty's "No routines yet." / "Add one." pair.
+ * Every workout is startable directly — tapping a row opens its detail
+ * screen, which carries the Start / Edit choice. There is no rotation
+ * and no app-picked "next" workout.
+ *
+ * First-time empty (no workouts anywhere) replaces the body with
+ * GymEmpty's "No workouts yet." / "Add one." pair.
  *
  * Hydration runs on focus — the store is populated via SQLite. No
  * mutations live here; Active Workout owns the start/complete writes
  * and refreshes this store + Today after each, and the Add/Edit
- * Routine modals (routes under /routine/) own their own writes plus
- * a re-hydrate before popping back.
+ * modals (routes under /routine/) own their own writes plus a
+ * re-hydrate before popping back.
  *
  * Tap targets:
- *   - Up next card's Start → /workout?templateId=... (active workout)
- *   - Routine row tap     → /routine/[id] (edit routine)
- *   - "+ Add routine"     → /routine/new (add routine)
- *   - "Add one." in empty → /routine/new (add routine, first-time)
+ *   - Resume card's Resume → /workout?templateId=... (active workout)
+ *   - Workout row tap      → /routine/[id] (workout detail)
+ *   - "+ Add workout"      → /routine/new (add workout)
+ *   - "Add one." in empty  → /routine/new (add workout, first-time)
  */
 export default function GymScreen() {
   const theme = useTheme();
@@ -52,7 +57,7 @@ export default function GymScreen() {
     router.push('/routine/new');
   }, [router]);
 
-  const openEditRoutine = useCallback(
+  const openWorkoutDetail = useCallback(
     (templateId: string) => {
       router.push(`/routine/${templateId}`);
     },
@@ -60,7 +65,6 @@ export default function GymScreen() {
   );
 
   const templates = useGymHomeStore((s) => s.templates);
-  const nextTemplateId = useGymHomeStore((s) => s.nextTemplateId);
   const completedDatesThisWeek = useGymHomeStore(
     (s) => s.completedDatesThisWeek,
   );
@@ -89,23 +93,6 @@ export default function GymScreen() {
         cancelled = true;
       };
     }, []),
-  );
-
-  const nextTemplate = useMemo(
-    () =>
-      templates.find((t) => t.template.id === nextTemplateId)?.template ?? null,
-    [templates, nextTemplateId],
-  );
-
-  const nextPreviewLine = useMemo(
-    () =>
-      nextTemplate
-        ? nextTemplate.exercises
-            .slice(0, 3)
-            .map((e) => e.name)
-            .join(', ')
-        : '',
-    [nextTemplate],
   );
 
   // The orphan's template — looked up from the hydrated templates list
@@ -161,24 +148,14 @@ export default function GymScreen() {
 
       {orphan && orphanTemplate ? (
         <>
-          <SectionHeader marginTop={0}>Up next</SectionHeader>
-          <NextWorkoutCard
-            mode="in-progress"
+          <SectionHeader marginTop={0}>In progress</SectionHeader>
+          <ResumeWorkoutCard
             name={orphanTemplate.name}
             currentExerciseName={orphan.currentExerciseName}
             currentSetNumber={orphan.currentSetNumber}
             totalSetsForExercise={orphan.totalSetsForExercise}
             elapsedMinutes={orphan.elapsedMinutes}
             onResume={() => startWorkout(orphan.templateId)}
-          />
-        </>
-      ) : nextTemplate ? (
-        <>
-          <SectionHeader marginTop={0}>Up next</SectionHeader>
-          <NextWorkoutCard
-            name={nextTemplate.name}
-            previewLine={nextPreviewLine}
-            onStart={() => startWorkout(nextTemplate.id)}
           />
         </>
       ) : null}
@@ -203,7 +180,7 @@ export default function GymScreen() {
         ) : null}
       </View>
 
-      <SectionHeader>Routines</SectionHeader>
+      <SectionHeader>Workouts</SectionHeader>
       <View>
         {templates.map((row, i) => {
           const lastPhrase = formatRelativeDate({
@@ -218,18 +195,17 @@ export default function GymScreen() {
               key={row.template.id}
               name={row.template.name}
               subtitle={subtitle}
-              isNextUp={row.template.id === nextTemplateId}
               isLast={i === templates.length - 1}
-              onPress={() => openEditRoutine(row.template.id)}
+              onPress={() => openWorkoutDetail(row.template.id)}
             />
           );
         })}
       </View>
       <View style={{ marginTop: theme.spacing[2] }}>
         <TextButton
-          label="+ Add routine"
+          label="+ Add workout"
           onPress={openAddRoutine}
-          accessibilityLabel="Add a routine"
+          accessibilityLabel="Add a workout"
         />
       </View>
     </Screen>

@@ -112,16 +112,16 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
     // Workout templates.
     for (const t of seed.workoutTemplates) {
       await db.runAsync(
-        `INSERT INTO workout_templates (id, name, exercises, rotation_order)
-         VALUES (?, ?, ?, ?);`,
-        [t.id, t.name, JSON.stringify(t.exercises), t.rotationOrder]
+        `INSERT INTO workout_templates (id, name, exercises)
+         VALUES (?, ?, ?);`,
+        [t.id, t.name, JSON.stringify(t.exercises)]
       );
     }
 
     // Per-template prior workout. One completed workout per template,
-    // staggered backwards from today by `(rotationOrder - 1) * 2 + 7`
-    // days so each template has its own "last" date that doesn't fall
-    // inside the current Mon–Sun week (Gym Home's THIS WEEK strip would
+    // staggered backwards from today by `idx * 2 + 7` days so each
+    // template has its own "last" date that doesn't fall inside the
+    // current Mon–Sun week (the Gym tab's THIS WEEK strip would
     // otherwise show seeded workouts as completed-this-week, which
     // contradicts the 'default' seed's "nothing logged this week"
     // frame).
@@ -136,8 +136,8 @@ export async function seedDev(name: SeedName = 'default'): Promise<void> {
     // mid-workout). Boot-time cleanup deletes any older than 24h. Resume-
     // in-progress would require surfacing them; deferred to Phase 4.
     const nowIso = new Date().toISOString();
-    for (const t of seed.workoutTemplates) {
-      const daysBack = (t.rotationOrder - 1) * 2 + 7;
+    for (const [idx, t] of seed.workoutTemplates.entries()) {
+      const daysBack = idx * 2 + 7;
       const completedDate = toIsoDate(subDays(new Date(), daysBack));
       const startedAt = `${completedDate}T08:00:00.000Z`;
       const completedAt = `${completedDate}T08:47:00.000Z`;

@@ -2,26 +2,34 @@ import { Card, Text } from '../primitives';
 
 type NoJournalYetCardProps = {
   onWrite: () => void;
+  /**
+   * Card body copy. Defaults to "No entry yet today." for Today's
+   * Yesterday slot; the Journal tab's pinned Today card passes
+   * "Write today." since it sits under a "TODAY" eyebrow that already
+   * names the slot.
+   */
+  label?: string;
 };
 
 /**
- * Stand-in for the Yesterday card when today's journal hasn't been
- * written yet. Same outer dimensions as JournalPreviewCard so the
- * screen rhythm holds.
+ * Stand-in for a journal card when the day's entry hasn't been written
+ * yet. Same outer dimensions as JournalPreviewCard so the screen
+ * rhythm holds. Used by Today's Yesterday slot and the Journal tab's
+ * pinned Today card.
  *
- * The whole card is the tap target — same pattern as the preview
- * card. The parent suppresses the "Yesterday" section header above
- * this card; the header belongs to the yesterday slot only, not to
- * this empty state.
+ * The whole card is the tap target — same pattern as the preview card.
  */
-export function NoJournalYetCard({ onWrite }: NoJournalYetCardProps) {
+export function NoJournalYetCard({
+  onWrite,
+  label = 'No entry yet today.',
+}: NoJournalYetCardProps) {
   return (
     <Card
       onPress={onWrite}
       accessibilityLabel="Write today's journal entry"
     >
       <Text variant="bodyMedium" tone="secondary" align="center">
-        No entry yet today.
+        {label}
       </Text>
     </Card>
   );

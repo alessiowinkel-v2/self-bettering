@@ -105,7 +105,7 @@ export function RoutineEditor({
   const trimmedName = name.trim();
   const canSave = trimmedName.length > 0 && exercises.length > 0 && !submitting;
 
-  const title = mode === 'create' ? 'New routine.' : 'Edit routine.';
+  const title = mode === 'create' ? 'New workout.' : 'Edit workout.';
 
   const onAddExercise = useCallback((exerciseName: string) => {
     setExercises((prev) => [
@@ -245,7 +245,7 @@ export function RoutineEditor({
               onPress={onSavePress}
               disabled={!canSave}
               accessibilityLabel={
-                mode === 'create' ? 'Save routine' : 'Save changes'
+                mode === 'create' ? 'Save workout' : 'Save changes'
               }
             />
           )}
@@ -258,7 +258,7 @@ export function RoutineEditor({
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="Routine name"
+          placeholder="Workout name"
           placeholderTextColor={theme.colors.textTertiary}
           autoFocus={mode === 'create' && exercises.length === 0}
           returnKeyType="done"

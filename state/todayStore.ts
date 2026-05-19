@@ -6,18 +6,13 @@ import {
 } from '../db/habitLogs';
 import { getActiveHabits } from '../db/habits';
 import { getJournalEntryForDate } from '../db/journal';
-import {
-  getMostRecentCompletedWorkoutDate,
-  getNextWorkoutTemplate,
-  getWorkoutTemplates,
-} from '../db/workouts';
+import { getMostRecentCompletedWorkoutDate } from '../db/workouts';
 import { todayIso, yesterdayIso } from '../utils/dateFormat';
 import type {
   Habit,
   HabitLog,
   HabitStatus,
   JournalEntry,
-  WorkoutTemplate,
 } from './types';
 
 /**
@@ -32,8 +27,8 @@ import type {
  * the `habit_logs` table. Selectors derive an O(1) lookup map when needed;
  * the canonical state stays normalized.
  *
- * Derived data (habitsWithStatus, allHeld, nextWorkout) is computed
- * inline in screens via useMemo. Returning freshly-built objects from
+ * Derived data (habitsWithStatus, allHeld) is computed inline in
+ * screens via useMemo. Returning freshly-built objects from
  * selectors triggers useSyncExternalStore's equality guard (Object.is
  * fails on every read, infinite-loop), so this store exposes primitive
  * fields only and lets consumers derive in render.
@@ -56,8 +51,6 @@ type TodayStoreState = {
    * recomputed on logHabit.
    */
   streaksThroughYesterday: Readonly<Record<string, number>>;
-  workoutTemplates: ReadonlyArray<WorkoutTemplate>;
-  nextWorkoutTemplateId: string | null;
   /** ISO date today's workout was completed, or null if not yet done. */
   completedWorkoutDate: string | null;
   /**
@@ -88,8 +81,6 @@ export const useTodayStore = create<TodayStoreState>((set) => ({
   todayJournal: null,
   yesterdayJournal: null,
   streaksThroughYesterday: {},
-  workoutTemplates: [],
-  nextWorkoutTemplateId: null,
   completedWorkoutDate: null,
   referenceDate: todayIso(),
 
@@ -118,18 +109,14 @@ export const useTodayStore = create<TodayStoreState>((set) => ({
       yesterdayLogs,
       todayJournal,
       yesterdayJournal,
-      workoutTemplates,
       mostRecentCompletedDate,
-      nextTemplate,
     ] = await Promise.all([
       getActiveHabits(),
       getLogsForDate(today),
       getLogsForDate(yesterday),
       getJournalEntryForDate(today),
       getJournalEntryForDate(yesterday),
-      getWorkoutTemplates(),
       getMostRecentCompletedWorkoutDate(),
-      getNextWorkoutTemplate(),
     ]);
 
     // Streak map: per-active-habit, as of end-of-yesterday. Promise.all
@@ -147,8 +134,6 @@ export const useTodayStore = create<TodayStoreState>((set) => ({
 
     const completedWorkoutDate =
       mostRecentCompletedDate === today ? today : null;
-    const nextWorkoutTemplateId =
-      completedWorkoutDate !== null ? null : nextTemplate?.id ?? null;
 
     set({
       habits,
@@ -156,8 +141,6 @@ export const useTodayStore = create<TodayStoreState>((set) => ({
       yesterdayLogs,
       todayJournal,
       yesterdayJournal,
-      workoutTemplates,
-      nextWorkoutTemplateId,
       completedWorkoutDate,
       streaksThroughYesterday,
       referenceDate: today,

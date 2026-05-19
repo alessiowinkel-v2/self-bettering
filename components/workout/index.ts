@@ -1,4 +1,4 @@
-export { NextWorkoutCard } from './NextWorkoutCard';
+export { ResumeWorkoutCard } from './ResumeWorkoutCard';
 export { SetRow, type SetRowStatus } from './SetRow';
 export { ExerciseHeader } from './ExerciseHeader';
 export { PreviousExerciseRow } from './PreviousExerciseRow';

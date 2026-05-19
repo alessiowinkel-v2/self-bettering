@@ -15,7 +15,6 @@ import {
   type StreaksRowItem,
 } from '../../components/today';
 import { JournalPreviewCard } from '../../components/journal';
-import { NextWorkoutCard } from '../../components/workout';
 import { useTheme } from '../../theme';
 import { useBackupReminderStore } from '../../state/backupReminderStore';
 import {
@@ -36,10 +35,9 @@ import { haptics } from '../../utils/haptics';
  *        'empty'         → "Add your first habit to begin." + filled CTA
  *        'today-is-done' → "Today is done." takeover + Streaks
  *        'default'       → Habit cards (or AllHeld) + Streaks +
- *                          Yesterday slot (JournalPreviewCard | NoJournalYetCard) +
- *                          Next workout (when queued)
+ *                          Yesterday slot (JournalPreviewCard | NoJournalYetCard)
  *
- * Architecture note: derived values (habitsWithStatus, allHeld, nextWorkout)
+ * Architecture note: derived values (habitsWithStatus, allHeld)
  * are computed inline via useMemo from primitive store fields. Selectors
  * that returned freshly-built arrays/objects triggered useSyncExternalStore's
  * Object.is equality guard and looped infinitely. Subscribing to primitives
@@ -100,8 +98,6 @@ export default function TodayScreen() {
   const todayLogs = useTodayStore((s) => s.todayLogs);
   const streaksThroughYesterday = useTodayStore((s) => s.streaksThroughYesterday);
   const yesterdayJournal = useTodayStore((s) => s.yesterdayJournal);
-  const workoutTemplates = useTodayStore((s) => s.workoutTemplates);
-  const nextWorkoutTemplateId = useTodayStore((s) => s.nextWorkoutTemplateId);
   const logHabit = useTodayStore((s) => s.logHabit);
 
   // Build an O(1) status lookup once per logs/habits change. The store's
@@ -138,19 +134,6 @@ export default function TodayScreen() {
     () => habits.length > 0 && habits.every((h) => todayStatus.get(h.id) === 'held'),
     [habits, todayStatus],
   );
-
-  const nextWorkout = useMemo(() => {
-    const template = workoutTemplates.find((t) => t.id === nextWorkoutTemplateId);
-    return template
-      ? {
-          template,
-          previewLine: template.exercises
-            .slice(0, 3)
-            .map((e) => e.name)
-            .join(', '),
-        }
-      : null;
-  }, [workoutTemplates, nextWorkoutTemplateId]);
 
   const streakItems: ReadonlyArray<StreaksRowItem> = useMemo(
     () =>
@@ -290,22 +273,6 @@ export default function TodayScreen() {
         </>
       ) : !hasJournalToday ? (
         <NoJournalYetCard onWrite={() => router.push(`/journal/${todayIso()}`)} />
-      ) : null}
-
-      {nextWorkout ? (
-        <>
-          <SectionHeader>Next workout</SectionHeader>
-          <NextWorkoutCard
-            name={nextWorkout.template.name}
-            previewLine={nextWorkout.previewLine}
-            onStart={() =>
-              router.push({
-                pathname: '/workout',
-                params: { templateId: nextWorkout.template.id },
-              })
-            }
-          />
-        </>
       ) : null}
     </Screen>
   );

@@ -67,9 +67,7 @@ export function seedYesterdayJournal(now: Date = new Date()): JournalEntry {
 }
 
 /**
- * Fixture-local extension of WorkoutTemplate. `rotationOrder` is a
- * seed-only concern that maps to the workout_templates.rotation_order
- * column. It does not bleed into the domain shape consumed by screens.
+ * Fixture-local extension of WorkoutTemplate.
  *
  * `priorSets` holds a synthetic prior-workout's sets per exercise, keyed
  * by exercise name. seedDev writes them into a completed workout dated
@@ -80,7 +78,6 @@ export function seedYesterdayJournal(now: Date = new Date()): JournalEntry {
  * reachable after running through the full flow once.
  */
 type SeedWorkoutTemplate = WorkoutTemplate & {
-  rotationOrder: number;
   priorSets: Readonly<Record<string, ReadonlyArray<SeedPriorSet>>>;
 };
 
@@ -93,7 +90,6 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
       { name: 'Incline DB press', setCount: 3, repRange: [8, 10] },
       { name: 'Triceps pushdown', setCount: 3, repRange: [10, 12] },
     ],
-    rotationOrder: 1,
     priorSets: {
       // Bench press is intentionally absent here. Its prior-workout data
       // is owned in full by `exerciseHistoryFixtures` below — a 23-session
@@ -121,7 +117,6 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
       { name: 'Pull-up', setCount: 4, repRange: [6, 10] },
       { name: 'Barbell row', setCount: 3, repRange: [8, 10] },
     ],
-    rotationOrder: 2,
     priorSets: {
       'Deadlift': [
         { kg: 140, reps: 5 },
@@ -149,7 +144,6 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
       { name: 'Romanian deadlift', setCount: 3, repRange: [8, 10] },
       { name: 'Calf raise', setCount: 3, repRange: [10, 15] },
     ],
-    rotationOrder: 3,
     priorSets: {
       'Back squat': [
         { kg: 110, reps: 8 },
@@ -177,7 +171,6 @@ export const seedWorkoutTemplates: ReadonlyArray<SeedWorkoutTemplate> = [
       { name: 'Lateral raise', setCount: 3, repRange: [10, 12] },
       { name: 'Dumbbell flye', setCount: 3, repRange: [10, 12] },
     ],
-    rotationOrder: 4,
     priorSets: {
       // Overhead press and Lateral raise are intentionally absent here.
       // Their prior-workout data is owned in full by

@@ -158,7 +158,11 @@ function RootStack() {
         <Stack.Screen name="exercise/[name]" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="routine/new" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="routine/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="routine/[id]" />
+        <Stack.Screen
+          name="routine/[id]/edit"
+          options={{ presentation: 'modal' }}
+        />
         <Stack.Screen
           name="workout"
           options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
